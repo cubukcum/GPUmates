@@ -868,6 +868,7 @@ function Start-RouterService {
         contextSize   = [int]$Configuration.settings.contextSize
         presetPath    = $script:ModelPresetPath
         tensorSplit   = [string]$Configuration.settings.tensorSplit
+        dashboardBaseUrl = 'http://{0}:8090' -f $Configuration.coordinatorIP
     }
     Write-JsonAtomic -Path $script:RouterRuntimeConfigPath -Value $RuntimeConfiguration
 

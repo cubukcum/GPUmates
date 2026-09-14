@@ -8,7 +8,8 @@ param(
     [string]$ListenHost = '127.0.0.1',
     [int]$Port = 8080,
     [string]$ApiKey,
-    [string]$TensorSplit
+    [string]$TensorSplit,
+    [string]$DashboardBaseUrl
 )
 
 Set-StrictMode -Version Latest
@@ -132,6 +133,47 @@ $ServerArguments = @(
     '--metrics',
     '--ui'
 )
+
+$ChatTemplateRoot = Join-Path $ProjectRoot 'chat\static'
+if (Test-Path -LiteralPath (Join-Path $ChatTemplateRoot 'index.html') -PathType Leaf) {
+    if ([string]::IsNullOrWhiteSpace($DashboardBaseUrl)) {
+        $DashboardHost = if ($ListenHost -eq '::1') { '127.0.0.1' } else { $ListenHost }
+        $NodeConfigPath = Join-Path $ProjectRoot 'config\telemetry-nodes.json'
+        if (Test-Path -LiteralPath $NodeConfigPath -PathType Leaf) {
+            try {
+                $NodeConfiguration = Get-Content -LiteralPath $NodeConfigPath -Raw | ConvertFrom-Json
+                $NodesProperty = $NodeConfiguration.PSObject.Properties['nodes']
+                if ($null -ne $NodesProperty) {
+                    foreach ($Node in @($NodesProperty.Value)) {
+                        $RoleProperty = $Node.PSObject.Properties['role']
+                        $LocalProperty = $Node.PSObject.Properties['local']
+                        if (($null -ne $RoleProperty -and $RoleProperty.Value -eq 'coordinator') -or
+                            ($null -ne $LocalProperty -and $LocalProperty.Value -eq $true)) {
+                            foreach ($PropertyName in @('displayIp', 'host')) {
+                                $HostProperty = $Node.PSObject.Properties[$PropertyName]
+                                if ($null -ne $HostProperty -and -not [string]::IsNullOrWhiteSpace([string]$HostProperty.Value)) {
+                                    $DashboardHost = [string]$HostProperty.Value
+                                    break
+                                }
+                            }
+                            break
+                        }
+                    }
+                }
+            }
+            catch {
+                Write-Warning 'Could not read the coordinator dashboard address from telemetry-nodes.json; using ListenHost. Pass -DashboardBaseUrl to override it.'
+            }
+        }
+        $DashboardBaseUrl = 'http://{0}:8090' -f $DashboardHost
+    }
+    $ChatUiPath = & (Join-Path $PSScriptRoot 'Prepare-GPUmatesChatUi.ps1') `
+        -TemplateRoot $ChatTemplateRoot -DashboardBaseUrl $DashboardBaseUrl
+    $ServerArguments += @('--path', $ChatUiPath)
+}
+else {
+    Write-Warning 'The GPUmates chat UI bundle is missing. Using the native llama.cpp chat without the GPU bar; build chat/Build-ChatUi.ps1 to enable it.'
+}
 
 if ($RpcEndpoints.Count -gt 0) {
     $ServerArguments += @('--rpc', $RpcEndpointList)

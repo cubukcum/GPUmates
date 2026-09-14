@@ -46,6 +46,7 @@ Source: "{#ProjectRoot}\scripts\GPUmates.Telemetry.psm1"; DestDir: "{app}\script
 Source: "{#ProjectRoot}\scripts\Start-GPUmatesControlCenter.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "{#ProjectRoot}\scripts\Start-ModelRouter.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "{#ProjectRoot}\scripts\Start-ModelRouterFromControl.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "{#ProjectRoot}\scripts\Prepare-GPUmatesChatUi.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "{#ProjectRoot}\scripts\Start-GPUmatesDashboard.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "{#ProjectRoot}\scripts\Configure-CoordinatorFirewall.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "{#ProjectRoot}\scripts\Configure-DashboardFirewall.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
@@ -56,6 +57,7 @@ Source: "{#ProjectRoot}\config\telemetry-nodes.json"; DestDir: "{app}\config"; F
 Source: "{#ProjectRoot}\config\gpumates-models.ini"; DestDir: "{app}\config"; Flags: ignoreversion onlyifdoesntexist
 Source: "{#ProjectRoot}\dashboard\static\*"; DestDir: "{app}\dashboard\static"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#ProjectRoot}\coordinator\static\*"; DestDir: "{app}\coordinator\static"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#ProjectRoot}\chat\static\*"; DestDir: "{app}\chat\static"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "README-INSTALLED.txt"; DestDir: "{app}"; DestName: "README.txt"; Flags: ignoreversion
 Source: "SAFETY.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ProjectRoot}\installer\worker\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion

@@ -638,6 +638,14 @@ if ($LocalCoordinatorDisplayIP -notin $AssignedCoordinatorIP) {
     throw "The local coordinator displayIp $LocalCoordinatorDisplayIP is not assigned to this PC."
 }
 
+# Chat and metrics keep separate keys. Only the coordinator's exact chat origins
+# can read this API from a browser; worker agents do not enable CORS.
+$AllowedChatOrigins = @(
+    "http://${LocalCoordinatorDisplayIP}:8080",
+    'http://127.0.0.1:8080',
+    'http://localhost:8080'
+)
+
 $LlamaConfig = Get-ConfigProperty -InputObject $Configuration -Name 'llama' -DefaultValue ([pscustomobject]@{ enabled = $false })
 if ([string]::IsNullOrWhiteSpace($DashboardRoot)) {
     $Candidates = @(
@@ -692,11 +700,17 @@ try {
             }
 
             try {
-                $Request = Read-GPUmatesHttpRequest -Stream $Stream
+                $Request = Read-GPUmatesHttpRequest -Stream $Stream -AllowOptions
             }
             catch {
                 $Body = ConvertTo-GPUmatesJsonBytes -InputObject ([ordered]@{ error = 'bad_request' })
                 Write-GPUmatesHttpResponse -Stream $Stream -StatusCode 400 -ReasonPhrase 'Bad Request' -Body $Body -AdditionalHeader $SecurityHeader
+                continue
+            }
+
+            if ($Request.method -eq 'OPTIONS' -and $Request.path -cne '/api/v1/cluster') {
+                $Body = ConvertTo-GPUmatesJsonBytes -InputObject ([ordered]@{ error = 'method_not_allowed' })
+                Write-GPUmatesHttpResponse -Stream $Stream -StatusCode 405 -ReasonPhrase 'Method Not Allowed' -Body $Body -AdditionalHeader ($SecurityHeader + @{ Allow = 'GET, HEAD' })
                 continue
             }
 
@@ -716,7 +730,47 @@ try {
                 continue
             }
 
-            if ($Request.path -eq '/api/v1/cluster') {
+            if ($Request.path -ceq '/api/v1/cluster') {
+                $ApiHeader = $SecurityHeader + @{ Vary = 'Origin' }
+                $Origin = $null
+                if ($Request.headers.ContainsKey('origin')) {
+                    $Origin = [string]$Request.headers['origin']
+                    $IsLoopbackOrigin = $Origin -cin @('http://127.0.0.1:8080', 'http://localhost:8080')
+                    $IsCoordinatorClient = $RemoteIP -in @('127.0.0.1', $LocalCoordinatorDisplayIP)
+                    if ($AllowedChatOrigins -cnotcontains $Origin -or ($IsLoopbackOrigin -and -not $IsCoordinatorClient)) {
+                        $Body = ConvertTo-GPUmatesJsonBytes -InputObject ([ordered]@{ error = 'origin_not_allowed' })
+                        Write-GPUmatesHttpResponse -Stream $Stream -StatusCode 403 -ReasonPhrase 'Forbidden' -Body $Body -AdditionalHeader $ApiHeader -HeadOnly:($Request.method -eq 'HEAD')
+                        continue
+                    }
+                    $ApiHeader['Access-Control-Allow-Origin'] = $Origin
+                }
+
+                if ($Request.method -eq 'OPTIONS') {
+                    if ([string]::IsNullOrEmpty($Origin) -or -not $Request.headers.ContainsKey('access-control-request-method')) {
+                        $Body = ConvertTo-GPUmatesJsonBytes -InputObject ([ordered]@{ error = 'invalid_preflight' })
+                        Write-GPUmatesHttpResponse -Stream $Stream -StatusCode 400 -ReasonPhrase 'Bad Request' -Body $Body -AdditionalHeader $ApiHeader
+                        continue
+                    }
+                    if ([string]$Request.headers['access-control-request-method'] -cnotin @('GET', 'HEAD')) {
+                        $Body = ConvertTo-GPUmatesJsonBytes -InputObject ([ordered]@{ error = 'method_not_allowed' })
+                        Write-GPUmatesHttpResponse -Stream $Stream -StatusCode 405 -ReasonPhrase 'Method Not Allowed' -Body $Body -AdditionalHeader ($ApiHeader + @{ Allow = 'GET, HEAD, OPTIONS' })
+                        continue
+                    }
+                    if ($Request.headers.ContainsKey('access-control-request-headers')) {
+                        $RequestedHeaders = @(([string]$Request.headers['access-control-request-headers']).Split(',') | ForEach-Object { $_.Trim().ToLowerInvariant() })
+                        if ($RequestedHeaders.Count -ne 1 -or $RequestedHeaders[0] -ne 'x-gpumates-key') {
+                            $Body = ConvertTo-GPUmatesJsonBytes -InputObject ([ordered]@{ error = 'headers_not_allowed' })
+                            Write-GPUmatesHttpResponse -Stream $Stream -StatusCode 403 -ReasonPhrase 'Forbidden' -Body $Body -AdditionalHeader $ApiHeader
+                            continue
+                        }
+                    }
+                    $ApiHeader['Access-Control-Allow-Methods'] = 'GET, HEAD'
+                    $ApiHeader['Access-Control-Allow-Headers'] = 'X-GPUmates-Key'
+                    $Body = ConvertTo-GPUmatesJsonBytes -InputObject ([ordered]@{ status = 'ok' })
+                    Write-GPUmatesHttpResponse -Stream $Stream -StatusCode 200 -ReasonPhrase 'OK' -Body $Body -AdditionalHeader $ApiHeader
+                    continue
+                }
+
                 $PresentedToken = $null
                 if ($Request.headers.ContainsKey('x-gpumates-key')) {
                     $PresentedToken = [string]$Request.headers['x-gpumates-key']
@@ -729,7 +783,7 @@ try {
                         -StatusCode 401 `
                         -ReasonPhrase 'Unauthorized' `
                         -Body $Body `
-                        -AdditionalHeader ($SecurityHeader + @{ 'WWW-Authenticate' = 'GPUmatesKey' }) `
+                        -AdditionalHeader ($ApiHeader + @{ 'WWW-Authenticate' = 'GPUmatesKey' }) `
                         -HeadOnly:($Request.method -eq 'HEAD')
                     continue
                 }
@@ -753,7 +807,7 @@ try {
                         -StatusCode 200 `
                         -ReasonPhrase 'OK' `
                         -Body $Body `
-                        -AdditionalHeader $SecurityHeader `
+                        -AdditionalHeader $ApiHeader `
                         -HeadOnly:($Request.method -eq 'HEAD')
                 }
                 catch {
@@ -764,7 +818,7 @@ try {
                         -StatusCode 503 `
                         -ReasonPhrase 'Service Unavailable' `
                         -Body $Body `
-                        -AdditionalHeader $SecurityHeader `
+                        -AdditionalHeader $ApiHeader `
                         -HeadOnly:($Request.method -eq 'HEAD')
                 }
                 continue

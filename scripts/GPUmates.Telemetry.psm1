@@ -480,7 +480,10 @@ function Read-GPUmatesHttpRequest {
         [System.Net.Sockets.NetworkStream]$Stream,
 
         [ValidateRange(1024, 65536)]
-        [int]$MaximumHeaderBytes = 16384
+        [int]$MaximumHeaderBytes = 16384,
+
+        # Only the dashboard opts in for its authenticated chat telemetry API.
+        [switch]$AllowOptions
     )
 
     $Bytes = [Collections.Generic.List[byte]]::new()
@@ -512,8 +515,9 @@ function Read-GPUmatesHttpRequest {
 
     $HeaderText = [Text.Encoding]::ASCII.GetString($Bytes.ToArray())
     $Lines = @($HeaderText -split "\r\n")
-    if ($Lines.Count -lt 1 -or $Lines[0] -notmatch '^(GET|HEAD) ([^ ]+) HTTP/(1\.0|1\.1)$') {
-        throw 'Only well-formed GET and HEAD requests are supported.'
+    $RequestPattern = if ($AllowOptions) { '^(GET|HEAD|OPTIONS) ([^ ]+) HTTP/(1\.0|1\.1)$' } else { '^(GET|HEAD) ([^ ]+) HTTP/(1\.0|1\.1)$' }
+    if ($Lines.Count -lt 1 -or $Lines[0] -cnotmatch $RequestPattern) {
+        throw 'The HTTP request method or request line is not supported.'
     }
 
     $Method = $Matches[1]
@@ -533,6 +537,10 @@ function Read-GPUmatesHttpRequest {
         }
         $Name = $Line.Substring(0, $ColonIndex).Trim().ToLowerInvariant()
         $Value = $Line.Substring($ColonIndex + 1).Trim()
+        if ($AllowOptions -and $Headers.ContainsKey($Name) -and
+            $Name -in @('origin', 'access-control-request-method', 'access-control-request-headers')) {
+            throw 'Duplicate CORS request headers are not supported.'
+        }
         if (-not $Headers.ContainsKey($Name)) {
             $Headers[$Name] = $Value
         }

@@ -14,6 +14,7 @@ $ControlSources = @(
     (Join-Path $ProjectRoot 'dashboard\control\styles.css'),
     (Join-Path $ProjectRoot 'dashboard\vite.control.config.ts')
 )
+& (Join-Path $ProjectRoot 'chat\Test-ChatUiBuild.ps1')
 
 & $LauncherBuild
 if ($LASTEXITCODE -ne 0) { throw "Coordinator launcher build failed with exit code $LASTEXITCODE." }

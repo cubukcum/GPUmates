@@ -30,6 +30,10 @@ if (-not [string]::IsNullOrWhiteSpace([string]$RuntimeConfiguration.presetPath))
 if (-not [string]::IsNullOrWhiteSpace([string]$RuntimeConfiguration.tensorSplit)) {
     $RouterParameters.TensorSplit = [string]$RuntimeConfiguration.tensorSplit
 }
+$DashboardUrlProperty = $RuntimeConfiguration.PSObject.Properties['dashboardBaseUrl']
+if ($null -ne $DashboardUrlProperty -and -not [string]::IsNullOrWhiteSpace([string]$DashboardUrlProperty.Value)) {
+    $RouterParameters.DashboardBaseUrl = [string]$DashboardUrlProperty.Value
+}
 if (-not [string]::IsNullOrWhiteSpace($env:GPUMATES_LLAMA_API_KEY)) {
     $RouterParameters.ApiKey = $env:GPUMATES_LLAMA_API_KEY
 }

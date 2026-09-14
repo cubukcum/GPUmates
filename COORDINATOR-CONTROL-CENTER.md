@@ -117,6 +117,31 @@ No GPUmates component is installed as a Windows service or launched at Windows
 sign-in. After a PC reboot, models are unloaded, PC1 must be opened from its
 shortcut, and each worker must be started by its owner.
 
+### GPU status inside chat
+
+The chat page includes a compact GPU status bar above the existing llama.cpp
+chat interface. Start the **Node dashboard** as well as the model router to
+make telemetry available, then unlock the bar with your **Dashboard key**.
+This key is separate from the Llama API key used for shared chat. A browser
+client must also be in the exact-IP **Node dashboard client IPs** list; chat
+access alone does not grant monitoring access.
+
+The bar reads the same telemetry as the node dashboard. Its dashboard link
+opens the full monitoring view. If monitoring is stopped or access is missing,
+chat remains available and the bar reports that monitoring is unavailable.
+After an update, an existing chat tab may need a second manual reload once its
+service worker has updated. Finish or save any prompt draft before reloading;
+GPUmates does not force a reload of an active chat.
+
+The installer includes the chat assets. Each router start prepares a writable
+copy under `%LOCALAPPDATA%\GPUmates\Coordinator\ChatUi`, with PC1's dashboard
+address for both local and LAN chat. It does not rewrite the files in
+`C:\Program Files`. Source-checkout users can build these assets with
+`chat\Build-ChatUi.ps1`; older checkouts without the bundle continue to use
+the native llama.cpp chat and log a warning. For a manually launched router,
+`Start-ModelRouter.ps1 -DashboardBaseUrl http://<PC1-IP>:8090` overrides the
+dashboard address normally read from `config\telemetry-nodes.json`.
+
 ## RPC and telemetry status are separate
 
 - **RPC compute — TCP 50052:** this is the path used for model tensors and GPU

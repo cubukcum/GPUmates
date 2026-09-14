@@ -1,0 +1,2 @@
+# Preserve the pinned frontend and manifest/source checksum bytes on Windows.
+/chat/** -text

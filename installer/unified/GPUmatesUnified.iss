@@ -61,6 +61,7 @@ Source: "{#ProjectRoot}\runtime\mtmd.dll"; DestDir: "{app}\runtime"; Flags: igno
 Source: "{#ProjectRoot}\scripts\Start-GPUmatesControlCenter.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion; Check: IsCoordinator
 Source: "{#ProjectRoot}\scripts\Start-ModelRouter.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion; Check: IsCoordinator
 Source: "{#ProjectRoot}\scripts\Start-ModelRouterFromControl.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion; Check: IsCoordinator
+Source: "{#ProjectRoot}\scripts\Prepare-GPUmatesChatUi.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion; Check: IsCoordinator
 Source: "{#ProjectRoot}\scripts\Start-GPUmatesDashboard.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion; Check: IsCoordinator
 Source: "{#ProjectRoot}\scripts\Configure-CoordinatorFirewall.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion; Check: IsCoordinator
 Source: "{#ProjectRoot}\scripts\Configure-DashboardFirewall.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion; Check: IsCoordinator
@@ -73,6 +74,7 @@ Source: "{#ProjectRoot}\config\telemetry-nodes.json"; DestDir: "{app}\config"; F
 Source: "{#ProjectRoot}\config\gpumates-models.ini"; DestDir: "{app}\config"; Flags: ignoreversion onlyifdoesntexist; Check: IsCoordinator
 Source: "{#ProjectRoot}\dashboard\static\*"; DestDir: "{app}\dashboard\static"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsCoordinator
 Source: "{#ProjectRoot}\coordinator\static\*"; DestDir: "{app}\coordinator\static"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsCoordinator
+Source: "{#ProjectRoot}\chat\static\*"; DestDir: "{app}\chat\static"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsCoordinator
 Source: "{#ProjectRoot}\installer\coordinator\README-INSTALLED.txt"; DestDir: "{app}"; DestName: "README.txt"; Flags: ignoreversion; Check: IsCoordinator
 Source: "ROLE-COORDINATOR.txt"; DestDir: "{app}"; DestName: "install-role.txt"; Flags: ignoreversion; Check: IsCoordinator
 
