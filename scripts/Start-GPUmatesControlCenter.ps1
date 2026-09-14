@@ -1404,7 +1404,8 @@ function Remove-ModelPreset {
 }
 
 function Get-RouterModelStatus {
-    param([Parameter(Mandatory)][object[]]$PresetModels)
+    # Fresh installations and removal of the last model leave a valid empty library.
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$PresetModels)
 
     $ActiveModel = $null
     $RouterState = Get-ManagedServiceState -Service router
