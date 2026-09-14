@@ -1,0 +1,138 @@
+# GPUmates unified Windows installer
+
+`GPUmates-Setup-0.3.1.exe` is the recommended offline installer for every
+Windows 11 GPU computer in the cluster. Setup asks for exactly one role:
+
+| Role | Install it on | Purpose |
+| --- | --- | --- |
+| Main PC / Coordinator | PC1 only | Stores GGUF models, uses PC1's GPU, controls workers, inference, sharing, and the dashboard |
+| GPU Worker | PC2 and every additional NVIDIA GPU PC | Contributes its GPU over RPC and sends read-only telemetry to PC1 |
+
+Do not choose both roles on one computer. PC1 already uses its GPU directly.
+A browser-only client installs nothing.
+
+## Before installation
+
+- Use Windows 11 x64, a current NVIDIA driver with working `nvidia-smi`, and
+  the Microsoft Visual C++ v14 x64 runtime.
+- Give PC1 and all workers unique DHCP-reserved or static private IPv4
+  addresses on a trusted LAN.
+- Close existing GPUmates, llama-server, RPC-worker, and telemetry windows.
+- Keep the EXE beside its `.sha256` file and verify it after copying. Version
+  0.3.1 is not Authenticode-signed, so SmartScreen may show **Unknown
+  publisher**.
+- If either older standalone GPUmates Coordinator or Worker package is
+  installed, uninstall it first. Unified Setup deliberately blocks mixed
+  legacy/unified installations because their uninstallers and firewall rules
+  overlap.
+
+## Install PC1
+
+1. Run `GPUmates-Setup-0.3.1.exe`, approve UAC, and choose **Main PC /
+   Coordinator**.
+2. Confirm PC1's name and its reserved private IPv4 address.
+3. Leave **Open GPUmates Coordinator now** selected.
+4. In the local Control Center, generate and save the Agent, Dashboard, and
+   Llama API keys. Keep a separate secure copy.
+5. Add each worker by name and IP, select the workers to use, start the router
+   and dashboard, then load one model from **Model library**. To register a new
+   PC1-local GGUF, stop the router and use **Add GGUF model** in that library.
+
+The Control Center is opened from **Start menu -> GPUmates Coordinator** at
+`http://127.0.0.1:8091/`. Always use the shortcut because the launcher supplies
+the per-session administration token. Setup does not include GGUF files.
+
+## Install PC2 and later workers
+
+1. Copy the same `GPUmates-Setup-0.3.1.exe` and checksum sidecar to the worker.
+2. Run Setup, approve UAC, and choose **GPU Worker**.
+3. Enter a unique worker name, PC1's private IPv4, and this worker's detected
+   private IPv4.
+4. Leave **Keep model tensor cache on this PC** selected for faster reloads on
+   a trusted worker. Clear it to disable future caching. To erase tensor files
+   already stored by an earlier installation, use **GPUmates Worker Cache
+   Settings > Clear cache** after Setup.
+5. Leave **Start GPUmates Worker now** selected.
+6. On the first telemetry start, paste the same AgentKey saved by PC1. It is
+   protected for that Windows account with DPAPI.
+
+The worker creates inbound TCP 50052 and 9835 rules restricted to PC1's exact
+IP. Its two visible PowerShell windows must stay open. After a reboot, use
+**Start menu -> GPUmates Worker -> Start GPUmates Worker**.
+
+The first model load still transfers this worker's tensor share over the LAN.
+With caching enabled, unloading frees VRAM while the tensor files remain under
+`%LOCALAPPDATA%\GPUmates\Worker\TensorCache\b10488\rpc`, so later loads can read them from the worker's
+SSD. Use **GPUmates Worker Cache Settings** on the worker to enable, disable,
+inspect, or clear the cache. A worker restart is required after changing the
+enabled setting.
+
+## Let other PCs use inference and the dashboard
+
+Browser clients do not install GPUmates. In PC1's Control Center, add every
+client's exact private IP under **Sharing** and apply the firewall change:
+
+- Chat and model UI: `http://PC1-IP:8080` with the Llama API key.
+- Read-only node dashboard: `http://PC1-IP:8090` with the DashboardKey.
+- PC1 administration: `http://127.0.0.1:8091` on PC1 only.
+
+RPC online and telemetry online are separate signals. A worker must have RPC
+TCP 50052 online to contribute to inference. Telemetry TCP 9835 controls its
+dashboard card.
+
+## Upgrade, change role, and uninstall
+
+Run a newer unified Setup and keep the same role to upgrade. Setup remembers
+the role, node name, network addresses, and any cache choice saved by version
+0.3.1 or later. A legacy upgrade with no saved cache choice starts unchecked
+so persistent storage is not enabled silently. Changing a computer between
+Coordinator and Worker requires uninstalling GPUmates first; Setup refuses an
+in-place role switch.
+
+Coordinator writable state and DPAPI secrets live under
+`%LOCALAPPDATA%\GPUmates\Coordinator` and are retained by uninstall. Worker
+configuration and logs under `%ProgramData%\GPUmates\Worker` are removed by
+uninstall. Tensor files under
+`%LOCALAPPDATA%\GPUmates\Worker\TensorCache\b10488\rpc` are retained so
+an uninstall cannot silently destroy model data; use **GPUmates Worker Cache
+Settings** to clear them first. Use **Forget saved AgentKey** before uninstall
+if other Windows accounts also ran worker telemetry.
+
+GPUmates processes are foreground applications, not Windows services. Firewall
+rules persist, but the Coordinator and Worker applications must be opened again
+after Windows restarts.
+
+## Silent installation
+
+Coordinator, with explicit values recommended:
+
+```powershell
+.\GPUmates-Setup-0.3.1.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ROLE=coordinator /COORDINATORIP=172.25.50.14 /NODENAME=PC1
+```
+
+Worker requires all four role/network parameters:
+
+```powershell
+.\GPUmates-Setup-0.3.1.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ROLE=worker /COORDINATORIP=172.25.50.14 /WORKERIP=172.25.50.49 /NODENAME=PC2 /CACHE=1
+```
+
+Use `/CACHE=0` to opt out of persistent worker tensor caching.
+For silent Worker installation or upgrade, `/CACHE=1` or `/CACHE=0` is
+required so persistent model-data storage is always an explicit choice.
+
+## Security
+
+Never port-forward TCP 50052, 9835, 8080, 8090, or 8091. RPC and the web
+endpoints use no transport encryption in this build; keep them on a trusted
+private LAN or place a proper VPN/TLS layer in front. Exact-IP Windows Firewall
+rules are the RPC security boundary.
+
+## Rebuild
+
+With Inno Setup 6 installed and the Control Center frontend already built:
+
+```powershell
+& '.\installer\unified\Build-UnifiedInstaller.ps1'
+```
+
+The reproducible setup source is `installer\unified\GPUmatesUnified.iss`.

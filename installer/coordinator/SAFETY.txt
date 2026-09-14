@@ -1,0 +1,18 @@
+GPUmates Coordinator - LAN safety notice
+========================================
+
+This application manages a local llama.cpp GPU cluster from PC1.
+
+* The administration page listens only on 127.0.0.1:8091 and must remain local.
+* llama.cpp RPC on worker TCP 50052 is experimental, unencrypted, and
+  unauthenticated. Worker firewall rules must allow PC1 only.
+* The shared model UI (8080) and read-only node dashboard (8090) use plain HTTP.
+  Share them only on a trusted private LAN with exact client-IP firewall rules
+  and separate strong keys.
+* Never port-forward any GPUmates port or expose it directly to the Internet.
+* Model tensors, prompts, responses, and telemetry cross the private LAN while
+  the cluster is in use.
+* Applying or changing sharing opens a Windows Administrator prompt. The
+  Control Center itself remains unelevated.
+* This preview installer is not Authenticode-signed. Verify the adjacent
+  SHA-256 checksum before accepting a SmartScreen "Unknown publisher" warning.

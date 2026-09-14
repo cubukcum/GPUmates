@@ -1,0 +1,26 @@
+# Downloaded runtimes, installers, and local output
+/.pnpm-store/
+/runtime/
+/downloads/
+/dist/
+/results/
+
+# Dependencies and tool caches
+node_modules/
+.openai/
+.next/
+.vinext/
+.wrangler/
+*.tsbuildinfo
+
+# Local secrets and machine state
+.env*
+!.env.example
+*.pem
+*.key
+*.log
+*.db
+*.sqlite*
+secrets/
+.DS_Store
+Thumbs.db

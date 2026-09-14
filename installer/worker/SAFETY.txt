@@ -1,0 +1,32 @@
+GPUmates Worker - LAN safety notice
+===================================
+
+This installer turns this PC into an explicitly started llama.cpp GPU worker
+for one coordinator PC on a trusted private LAN.
+
+Important boundaries:
+
+* The llama.cpp RPC protocol on TCP 50052 is experimental, unencrypted, and
+  unauthenticated. Setup creates a narrow Windows Firewall rule that permits
+  only the coordinator IP entered in the wizard.
+* Never port-forward TCP 50052, TCP 9835, or any GPUmates UI port. Do not use
+  this worker on an untrusted or public network.
+* Model tensors and inference data cross the LAN while a model is running.
+  The complete GGUF file remains on the coordinator. Setup offers a persistent
+  local tensor cache and enables it by default for faster reloads. Cached raw
+  tensors use disk and remain after unload/restart until the PC owner clears
+  them. Clearing the option disables future cache use but does not delete
+  existing files; use GPUmates Worker Cache Settings to clear those explicitly.
+* The telemetry endpoint is read-only and requires the shared AgentKey as well
+  as the coordinator-only firewall rule.
+* GPU participation is not installed as a hidden service. The PC owner starts
+  visible worker windows and can stop them with Ctrl+C or by closing them.
+* Before installing or upgrading, close any old GPUmates RPC-worker and
+  telemetry PowerShell windows so TCP 50052 and 9835 are available.
+* Keep Windows Firewall enabled and use a DHCP reservation or static address so
+  the configured IP does not silently change.
+* The llama.cpp runtime requires Microsoft's Visual C++ v14 x64 runtime. If it
+  is missing, Setup stops and directs you to Microsoft's official installer.
+
+This preview installer is not code-signed. Windows SmartScreen may therefore
+show an Unknown publisher warning even if its SHA-256 checksum is correct.

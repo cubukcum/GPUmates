@@ -1,0 +1,24 @@
+GPUmates unified setup - private LAN safety
+============================================
+
+Setup installs exactly one role on this computer:
+
+* Main PC / Coordinator stores GGUF models, runs inference, and provides the
+  PC1-only Control Center.
+* GPU Worker contributes this PC's NVIDIA GPU to one Coordinator.
+
+Do not install both roles on one PC. The Coordinator already uses its own GPU
+directly. RPC on TCP 50052 is experimental, unencrypted, and unauthenticated;
+the worker's exact-IP Windows Firewall rule is its security boundary. Shared
+chat (8080), dashboard (8090), worker telemetry (9835), and RPC (50052) must
+stay on a trusted private LAN. Never port-forward them. The PC1 administration
+port (8091) must remain loopback-only.
+
+Worker Setup enables a persistent local tensor cache by default to make repeat
+model loads faster. Raw model tensor data can use several gigabytes and remains
+on that worker after unload/restart until its owner clears it. Clearing the
+cache option disables future use but does not delete existing files; use
+GPUmates Worker Cache Settings to clear those explicitly.
+
+This preview installer is not Authenticode-signed. Verify its adjacent SHA-256
+sidecar before accepting a SmartScreen "Unknown publisher" warning.
