@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([string]$CompilerPath)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -38,8 +38,14 @@ $CompilerCandidates = @(
     (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
     (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
 )
-$Compiler = $CompilerCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
-if ([string]::IsNullOrWhiteSpace($Compiler)) { throw 'Inno Setup 6 command-line compiler (ISCC.exe) was not found.' }
+if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
+    $Compiler = $CompilerCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($Compiler)) { throw 'Inno Setup 6 command-line compiler (ISCC.exe) was not found. Pass -CompilerPath for a portable compiler.' }
+}
+else {
+    $Compiler = (Resolve-Path -LiteralPath $CompilerPath -ErrorAction Stop).Path
+    if (-not (Test-Path -LiteralPath $Compiler -PathType Leaf)) { throw 'CompilerPath must point to ISCC.exe.' }
+}
 
 $VersionMatch = Select-String -LiteralPath $InstallerSource -Pattern '^#define\s+AppVersion\s+"([^"]+)"$' | Select-Object -First 1
 if ($null -eq $VersionMatch) { throw 'Could not read AppVersion from GPUmatesUnified.iss.' }

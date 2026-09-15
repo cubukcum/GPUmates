@@ -1,4 +1,4 @@
-; Shared by both Coordinator installers. The caller declares CoordinatorPortsPage.
+// Shared by both Coordinator installers. The caller declares CoordinatorPortsPage.
 function IsValidTcpPort(const Value: String): Boolean;
 var
   Text: String;

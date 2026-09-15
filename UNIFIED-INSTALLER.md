@@ -1,6 +1,6 @@
 # GPUmates unified Windows installer
 
-`GPUmates-Setup-0.3.2.exe` is the recommended offline installer for every
+`GPUmates-Setup-0.3.3.exe` is the recommended offline installer for every
 Windows 11 GPU computer in the cluster. Setup asks for exactly one role:
 
 | Role | Install it on | Purpose |
@@ -19,7 +19,7 @@ A browser-only client installs nothing.
   addresses on a trusted LAN.
 - Close existing GPUmates, llama-server, RPC-worker, and telemetry windows.
 - Keep the EXE beside its `.sha256` file and verify it after copying. Version
-  0.3.2 is not Authenticode-signed, so SmartScreen may show **Unknown
+  0.3.3 is not Authenticode-signed, so SmartScreen may show **Unknown
   publisher**.
 - If either older standalone GPUmates Coordinator or Worker package is
   installed, uninstall it first. Unified Setup deliberately blocks mixed
@@ -28,7 +28,7 @@ A browser-only client installs nothing.
 
 ## Install PC1
 
-1. Run `GPUmates-Setup-0.3.2.exe`, approve UAC, and choose **Main PC /
+1. Run `GPUmates-Setup-0.3.3.exe`, approve UAC, and choose **Main PC /
    Coordinator**.
 2. Confirm PC1's name and its reserved private IPv4 address.
 3. Choose the chat/API, dashboard, and Control Center TCP ports. The defaults
@@ -48,7 +48,7 @@ the per-session administration token. Setup does not include GGUF files.
 
 ## Install PC2 and later workers
 
-1. Copy the same `GPUmates-Setup-0.3.2.exe` and checksum sidecar to the worker.
+1. Copy the same `GPUmates-Setup-0.3.3.exe` and checksum sidecar to the worker.
 2. Run Setup, approve UAC, and choose **GPU Worker**.
 3. Enter a unique worker name, PC1's private IPv4, and this worker's detected
    private IPv4. Set **Main PC dashboard port** to the dashboard port chosen
@@ -92,6 +92,11 @@ dashboard card.
 
 ## Upgrade, change role, and uninstall
 
+Version 0.3.3 adds selectable Coordinator ports with conflict checks during Setup.
+The launcher, service URLs, and LAN sharing firewall rules use the saved ports;
+workers can also select PC1's dashboard port for their shortcut. After changing
+ports on PC1, apply **Sharing** again to replace the previous firewall rules.
+
 Version 0.3.2 fixes the Control Center status error when no models are registered,
 including on a fresh coordinator installation or after removing the last model.
 If an earlier unified installation shows `PresetModels` / `empty array`, close GPUmates
@@ -125,13 +130,13 @@ after Windows restarts.
 Coordinator, with explicit values recommended:
 
 ```powershell
-.\GPUmates-Setup-0.3.2.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ROLE=coordinator /COORDINATORIP=172.25.50.14 /NODENAME=PC1 /ROUTERPORT=18080 /DASHBOARDPORT=18090 /CONTROLPORT=18091
+.\GPUmates-Setup-0.3.3.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ROLE=coordinator /COORDINATORIP=172.25.50.14 /NODENAME=PC1 /ROUTERPORT=18080 /DASHBOARDPORT=18090 /CONTROLPORT=18091
 ```
 
 Worker requires all four role/network parameters:
 
 ```powershell
-.\GPUmates-Setup-0.3.2.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ROLE=worker /COORDINATORIP=172.25.50.14 /WORKERIP=172.25.50.49 /NODENAME=PC2 /DASHBOARDPORT=18090 /CACHE=1
+.\GPUmates-Setup-0.3.3.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ROLE=worker /COORDINATORIP=172.25.50.14 /WORKERIP=172.25.50.49 /NODENAME=PC2 /DASHBOARDPORT=18090 /CACHE=1
 ```
 
 Use `/CACHE=0` to opt out of persistent worker tensor caching.
@@ -160,6 +165,12 @@ With Inno Setup 6 installed and the Control Center frontend already built:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File '.\scripts\Test-ControlCenterModelStatus.ps1'
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File '.\scripts\Test-CoordinatorPortPreflight.ps1'
 & '.\installer\unified\Build-UnifiedInstaller.ps1'
+```
+
+For a portable Inno Setup compiler, pass its path explicitly:
+
+```powershell
+& '.\installer\unified\Build-UnifiedInstaller.ps1' -CompilerPath '.\downloads\tools\inno-setup\ISCC.exe'
 ```
 
 The reproducible setup source is `installer\unified\GPUmatesUnified.iss`.

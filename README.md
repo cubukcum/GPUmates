@@ -34,7 +34,7 @@ and `checksums.sha256`.
 The recommended operator path for every Windows GPU PC is one offline setup:
 
 ```text
-dist\installer\GPUmates-Setup-0.3.0.exe
+dist\installer\GPUmates-Setup-0.3.3.exe
 ```
 
 On PC1 choose **Main PC / Coordinator**. On PC2 and every additional GPU

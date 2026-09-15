@@ -1,4 +1,4 @@
-#define AppVersion "0.3.2"
+#define AppVersion "0.3.3"
 #define ProjectRoot "..\.."
 
 [Setup]
@@ -12,7 +12,7 @@ VersionInfoCompany=GPUmates
 VersionInfoDescription=GPUmates unified Coordinator and GPU Worker setup
 VersionInfoProductName=GPUmates Setup
 VersionInfoProductVersion={#AppVersion}
-VersionInfoVersion=0.3.2.0
+VersionInfoVersion=0.3.3.0
 DefaultDirName={code:GetDefaultDirName}
 UsePreviousAppDir=no
 DefaultGroupName=GPUmates

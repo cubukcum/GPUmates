@@ -128,7 +128,16 @@ try {
 }
 finally {
     if (Test-Path -LiteralPath $StagingRoot) {
-        Remove-Item -LiteralPath $StagingRoot -Recurse -Force
+        $ResolvedProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot).ProviderPath.TrimEnd('\', '/')
+        $ResolvedStagingRoot = (Resolve-Path -LiteralPath $StagingRoot).ProviderPath
+        if (-not $ResolvedStagingRoot.StartsWith(
+            $ResolvedProjectRoot + [System.IO.Path]::DirectorySeparatorChar,
+            [System.StringComparison]::OrdinalIgnoreCase
+        ) -or (Split-Path -Leaf $ResolvedStagingRoot) -notmatch '^\.runtime-staging-[a-f0-9]{32}$') {
+            throw "Refusing to remove staging directory outside the project: $ResolvedStagingRoot"
+        }
+
+        Remove-Item -LiteralPath $ResolvedStagingRoot -Recurse -Force
     }
 }
 
