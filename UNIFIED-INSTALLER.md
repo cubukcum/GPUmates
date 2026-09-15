@@ -31,15 +31,19 @@ A browser-only client installs nothing.
 1. Run `GPUmates-Setup-0.3.2.exe`, approve UAC, and choose **Main PC /
    Coordinator**.
 2. Confirm PC1's name and its reserved private IPv4 address.
-3. Leave **Open GPUmates Coordinator now** selected.
-4. In the local Control Center, generate and save the Agent, Dashboard, and
+3. Choose the chat/API, dashboard, and Control Center TCP ports. The defaults
+   are 8080, 8090, and 8091. Use three different numbers from 1024 to 65535.
+   Setup checks that the ports are free; if one is occupied, go back to
+   **Main PC TCP ports** and choose another number or close the app using it.
+4. Leave **Open GPUmates Coordinator now** selected.
+5. In the local Control Center, generate and save the Agent, Dashboard, and
    Llama API keys. Keep a separate secure copy.
-5. Add each worker by name and IP, select the workers to use, start the router
+6. Add each worker by name and IP, select the workers to use, start the router
    and dashboard, then load one model from **Model library**. To register a new
    PC1-local GGUF, stop the router and use **Add GGUF model** in that library.
 
 The Control Center is opened from **Start menu -> GPUmates Coordinator** at
-`http://127.0.0.1:8091/`. Always use the shortcut because the launcher supplies
+`http://127.0.0.1:CONTROL-PORT/` (8091 by default). Always use the shortcut because the launcher supplies
 the per-session administration token. Setup does not include GGUF files.
 
 ## Install PC2 and later workers
@@ -47,7 +51,8 @@ the per-session administration token. Setup does not include GGUF files.
 1. Copy the same `GPUmates-Setup-0.3.2.exe` and checksum sidecar to the worker.
 2. Run Setup, approve UAC, and choose **GPU Worker**.
 3. Enter a unique worker name, PC1's private IPv4, and this worker's detected
-   private IPv4.
+   private IPv4. Set **Main PC dashboard port** to the dashboard port chosen
+   on PC1 (8090 by default); the worker's dashboard shortcut uses it.
 4. Leave **Keep model tensor cache on this PC** selected for faster reloads on
    a trusted worker. Clear it to disable future caching. To erase tensor files
    already stored by an earlier installation, use **GPUmates Worker Cache
@@ -72,9 +77,14 @@ enabled setting.
 Browser clients do not install GPUmates. In PC1's Control Center, add every
 client's exact private IP under **Sharing** and apply the firewall change:
 
-- Chat and model UI: `http://PC1-IP:8080` with the Llama API key.
-- Read-only node dashboard: `http://PC1-IP:8090` with the DashboardKey.
-- PC1 administration: `http://127.0.0.1:8091` on PC1 only.
+- Chat and model UI: `http://PC1-IP:ROUTER-PORT` with the Llama API key (8080 by default).
+- Read-only node dashboard: `http://PC1-IP:DASHBOARD-PORT` with the DashboardKey (8090 by default).
+- PC1 administration: `http://127.0.0.1:CONTROL-PORT` on PC1 only (8091 by default).
+
+Use the URLs shown in the Control Center. Applying **Sharing** creates Windows
+Firewall rules for the selected chat and dashboard ports, restricted to the
+exact private client IPs you allow. The Control Center stays local to PC1.
+Enable LAN chat sharing and start the relevant service for its LAN URL to work.
 
 RPC online and telemetry online are separate signals. A worker must have RPC
 TCP 50052 online to contribute to inference. Telemetry TCP 9835 controls its
@@ -90,7 +100,8 @@ then open **GPUmates Coordinator** from the Start menu. No uninstall is needed;
 the existing coordinator state and keys are retained.
 
 Run a newer unified Setup and keep the same role to upgrade. Setup remembers
-the role, node name, network addresses, and any cache choice saved by version
+the role, node name, network addresses, selected Coordinator ports, the Worker's
+dashboard port, and any cache choice saved by version
 0.3.1 or later. A legacy upgrade with no saved cache choice starts unchecked
 so persistent storage is not enabled silently. Changing a computer between
 Coordinator and Worker requires uninstalling GPUmates first; Setup refuses an
@@ -114,22 +125,29 @@ after Windows restarts.
 Coordinator, with explicit values recommended:
 
 ```powershell
-.\GPUmates-Setup-0.3.2.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ROLE=coordinator /COORDINATORIP=172.25.50.14 /NODENAME=PC1
+.\GPUmates-Setup-0.3.2.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ROLE=coordinator /COORDINATORIP=172.25.50.14 /NODENAME=PC1 /ROUTERPORT=18080 /DASHBOARDPORT=18090 /CONTROLPORT=18091
 ```
 
 Worker requires all four role/network parameters:
 
 ```powershell
-.\GPUmates-Setup-0.3.2.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ROLE=worker /COORDINATORIP=172.25.50.14 /WORKERIP=172.25.50.49 /NODENAME=PC2 /CACHE=1
+.\GPUmates-Setup-0.3.2.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ROLE=worker /COORDINATORIP=172.25.50.14 /WORKERIP=172.25.50.49 /NODENAME=PC2 /DASHBOARDPORT=18090 /CACHE=1
 ```
 
 Use `/CACHE=0` to opt out of persistent worker tensor caching.
+Port parameters are optional: Setup reuses saved choices on an upgrade and
+uses 8080/8090/8091 for a fresh Coordinator install. Invalid, duplicate, or
+occupied Coordinator ports block silent installation too. The standalone
+Coordinator installer accepts the same `/COORDINATORIP`, `/NODENAME`, and three
+port parameters. Coordinator port choices are written to the installation's
+`config\network.json` for its launcher, runtime services, and sharing rules.
 For silent Worker installation or upgrade, `/CACHE=1` or `/CACHE=0` is
 required so persistent model-data storage is always an explicit choice.
 
 ## Security
 
-Never port-forward TCP 50052, 9835, 8080, 8090, or 8091. RPC and the web
+Never port-forward TCP 50052, 9835, or any of your selected Coordinator ports
+(8080, 8090, and 8091 by default). RPC and the web
 endpoints use no transport encryption in this build; keep them on a trusted
 private LAN or place a proper VPN/TLS layer in front. Exact-IP Windows Firewall
 rules are the RPC security boundary.
@@ -140,6 +158,7 @@ With Inno Setup 6 installed and the Control Center frontend already built:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File '.\scripts\Test-ControlCenterModelStatus.ps1'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File '.\scripts\Test-CoordinatorPortPreflight.ps1'
 & '.\installer\unified\Build-UnifiedInstaller.ps1'
 ```
 

@@ -19,6 +19,14 @@ directly, including when no remote worker is selected.
 
 ## Install on PC1
 
+Setup lets you choose separate chat/API, dashboard, and Control Center ports
+(defaults 8080, 8090, and 8091). It rejects ports already in use before
+installation; go back and choose another port if needed. The launcher opens
+the selected Control Center port automatically. The URLs below assume defaults.
+To change ports later, close GPUmates and rerun Setup, then apply **Sharing**
+again so Windows Firewall uses the new ports. Sharing grants access only to the
+client IPs you list; the Control Center remains on loopback.
+
 Before setup, keep PC1 on a DHCP-reserved or static private IPv4 address and
 close older GPUmates router, dashboard, or Control Center processes that may be
 using TCP 8080, 8090, or 8091. PC1 needs Windows 11 x64, a current NVIDIA

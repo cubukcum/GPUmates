@@ -6,6 +6,7 @@ param(
     [int]$ContextSize = 8192,
     [int]$RpcPort = 50052,
     [string]$ListenHost = '127.0.0.1',
+    [ValidateRange(1024, 65535)]
     [int]$Port = 8080,
     [string]$ApiKey,
     [string]$TensorSplit,
@@ -33,6 +34,11 @@ if ($ListenHost -notin $LoopbackHosts -and [string]::IsNullOrWhiteSpace($ApiKey)
 }
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
+Import-Module (Join-Path $PSScriptRoot 'GPUmates.Network.psm1') -Force
+$NetworkConfiguration = Get-GPUmatesNetworkConfiguration -ProjectRoot $ProjectRoot
+if (-not $PSBoundParameters.ContainsKey('Port')) {
+    $Port = $NetworkConfiguration.routerPort
+}
 $ServerExe = (Resolve-Path -LiteralPath (Join-Path $ProjectRoot 'runtime\llama-server.exe')).Path
 
 if ([string]::IsNullOrWhiteSpace($PresetPath)) {
@@ -165,10 +171,10 @@ if (Test-Path -LiteralPath (Join-Path $ChatTemplateRoot 'index.html') -PathType 
                 Write-Warning 'Could not read the coordinator dashboard address from telemetry-nodes.json; using ListenHost. Pass -DashboardBaseUrl to override it.'
             }
         }
-        $DashboardBaseUrl = 'http://{0}:8090' -f $DashboardHost
+        $DashboardBaseUrl = 'http://{0}:{1}' -f $DashboardHost, $NetworkConfiguration.dashboardPort
     }
     $ChatUiPath = & (Join-Path $PSScriptRoot 'Prepare-GPUmatesChatUi.ps1') `
-        -TemplateRoot $ChatTemplateRoot -DashboardBaseUrl $DashboardBaseUrl
+        -TemplateRoot $ChatTemplateRoot -DashboardBaseUrl $DashboardBaseUrl -DashboardPort $NetworkConfiguration.dashboardPort
     $ServerArguments += @('--path', $ChatUiPath)
 }
 else {

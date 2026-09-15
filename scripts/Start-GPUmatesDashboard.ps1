@@ -31,7 +31,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 Import-Module (Join-Path $PSScriptRoot 'GPUmates.Telemetry.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'GPUmates.Network.psm1') -Force
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
+$NetworkConfiguration = Get-GPUmatesNetworkConfiguration -ProjectRoot $ProjectRoot
+if (-not $PSBoundParameters.ContainsKey('Port')) {
+    $Port = $NetworkConfiguration.dashboardPort
+}
 if ([string]::IsNullOrWhiteSpace($NodeConfig)) {
     $NodeConfig = Join-Path $ProjectRoot 'config\telemetry-nodes.json'
 }
@@ -283,7 +288,8 @@ function Get-LlamaStatus {
         [Parameter(Mandatory)][object]$LlamaConfig,
         [string]$ApiKey,
         [int]$TimeoutMilliseconds,
-        [Parameter(Mandatory)][string]$AllowedCoordinatorIP
+        [Parameter(Mandatory)][string]$AllowedCoordinatorIP,
+        [ValidateRange(1024, 65535)][int]$RouterPort = 8080
     )
 
     $Enabled = [bool](Get-ConfigProperty -InputObject $LlamaConfig -Name 'enabled' -DefaultValue $false)
@@ -291,12 +297,12 @@ function Get-LlamaStatus {
         return [ordered]@{ enabled = $false; online = $false }
     }
 
-    $BaseUrl = ([string](Get-ConfigProperty -InputObject $LlamaConfig -Name 'baseUrl' -DefaultValue 'http://127.0.0.1:8080')).TrimEnd('/')
+    $BaseUrl = ([string](Get-ConfigProperty -InputObject $LlamaConfig -Name 'baseUrl' -DefaultValue "http://127.0.0.1:$RouterPort")).TrimEnd('/')
     $BaseUri = [uri]$BaseUrl
     $AllowedLlamaHosts = @('127.0.0.1', 'localhost', $AllowedCoordinatorIP)
     if ($BaseUri.Scheme -ne 'http' -or
         $BaseUri.Host -notin $AllowedLlamaHosts -or
-        $BaseUri.Port -ne 8080 -or
+        $BaseUri.Port -ne $RouterPort -or
         -not [string]::IsNullOrEmpty($BaseUri.UserInfo) -or
         $BaseUri.AbsolutePath -ne '/' -or
         -not [string]::IsNullOrEmpty($BaseUri.Query) -or
@@ -328,12 +334,12 @@ function Get-LlamaStatus {
             $PublicUri = [uri]$PublicUrl
             if ($PublicUri.Scheme -ne 'http' -or
                 $PublicUri.Host -notin $AllowedLlamaHosts -or
-                $PublicUri.Port -ne 8080 -or
+                $PublicUri.Port -ne $RouterPort -or
                 -not [string]::IsNullOrEmpty($PublicUri.UserInfo) -or
                 $PublicUri.AbsolutePath -ne '/' -or
                 -not [string]::IsNullOrEmpty($PublicUri.Query) -or
                 -not [string]::IsNullOrEmpty($PublicUri.Fragment)) {
-                throw 'publicUrl must be the exact loopback or coordinator HTTP address on port 8080.'
+                throw "publicUrl must be the exact loopback or coordinator HTTP address on configured router port $RouterPort."
             }
             $Result.publicUrl = $PublicUrl.TrimEnd('/')
         }
@@ -404,7 +410,8 @@ function Get-ClusterSnapshot {
         [int]$TimeoutMilliseconds,
         [Parameter(Mandatory)][object]$LlamaConfig,
         [string]$LlamaApiKey,
-        [Parameter(Mandatory)][string]$AllowedCoordinatorIP
+        [Parameter(Mandatory)][string]$AllowedCoordinatorIP,
+        [ValidateRange(1024, 65535)][int]$RouterPort = 8080
     )
 
     $Snapshots = @($ConfiguredNode | ForEach-Object {
@@ -475,7 +482,8 @@ function Get-ClusterSnapshot {
             -LlamaConfig $LlamaConfig `
             -ApiKey $LlamaApiKey `
             -TimeoutMilliseconds $TimeoutMilliseconds `
-            -AllowedCoordinatorIP $AllowedCoordinatorIP
+            -AllowedCoordinatorIP $AllowedCoordinatorIP `
+            -RouterPort $RouterPort
     }
 }
 
@@ -563,6 +571,12 @@ $Configuration = Get-Content -LiteralPath $ResolvedNodeConfig -Raw | ConvertFrom
 if ((Get-ConfigProperty -InputObject $Configuration -Name 'schemaVersion') -ne 1) {
     throw 'The node configuration must use schemaVersion 1.'
 }
+$NodeNetworkConfiguration = Get-ConfigProperty -InputObject $Configuration -Name 'network' -DefaultValue $NetworkConfiguration
+$ConfiguredRouterPort = Get-ConfigProperty -InputObject $NodeNetworkConfiguration -Name 'routerPort' -DefaultValue $NetworkConfiguration.routerPort
+[int]$RouterPort = 0
+if (-not [int]::TryParse([string]$ConfiguredRouterPort, [ref]$RouterPort) -or $RouterPort -lt 1024 -or $RouterPort -gt 65535) {
+    throw 'The node configuration network.routerPort must be an integer from 1024 to 65535.'
+}
 $DashboardConfig = Get-ConfigProperty -InputObject $Configuration -Name 'dashboard' -DefaultValue ([pscustomobject]@{})
 $ConfiguredClientIP = @(Get-ConfigProperty -InputObject $DashboardConfig -Name 'allowedClientIps' -DefaultValue @())
 $AllowedDashboardClientAddress = [Collections.Generic.List[string]]::new()
@@ -641,9 +655,9 @@ if ($LocalCoordinatorDisplayIP -notin $AssignedCoordinatorIP) {
 # Chat and metrics keep separate keys. Only the coordinator's exact chat origins
 # can read this API from a browser; worker agents do not enable CORS.
 $AllowedChatOrigins = @(
-    "http://${LocalCoordinatorDisplayIP}:8080",
-    'http://127.0.0.1:8080',
-    'http://localhost:8080'
+    "http://${LocalCoordinatorDisplayIP}:$RouterPort",
+    "http://127.0.0.1:$RouterPort",
+    "http://localhost:$RouterPort"
 )
 
 $LlamaConfig = Get-ConfigProperty -InputObject $Configuration -Name 'llama' -DefaultValue ([pscustomobject]@{ enabled = $false })
@@ -735,7 +749,7 @@ try {
                 $Origin = $null
                 if ($Request.headers.ContainsKey('origin')) {
                     $Origin = [string]$Request.headers['origin']
-                    $IsLoopbackOrigin = $Origin -cin @('http://127.0.0.1:8080', 'http://localhost:8080')
+                    $IsLoopbackOrigin = $Origin -cin @("http://127.0.0.1:$RouterPort", "http://localhost:$RouterPort")
                     $IsCoordinatorClient = $RemoteIP -in @('127.0.0.1', $LocalCoordinatorDisplayIP)
                     if ($AllowedChatOrigins -cnotcontains $Origin -or ($IsLoopbackOrigin -and -not $IsCoordinatorClient)) {
                         $Body = ConvertTo-GPUmatesJsonBytes -InputObject ([ordered]@{ error = 'origin_not_allowed' })
@@ -798,7 +812,8 @@ try {
                             -TimeoutMilliseconds $NodeTimeoutMilliseconds `
                             -LlamaConfig $LlamaConfig `
                             -LlamaApiKey $LlamaApiKey `
-                            -AllowedCoordinatorIP $LocalCoordinatorDisplayIP
+                            -AllowedCoordinatorIP $LocalCoordinatorDisplayIP `
+                            -RouterPort $RouterPort
                         $ClusterCachedAt = [DateTimeOffset]::UtcNow
                     }
                     $Body = ConvertTo-GPUmatesJsonBytes -InputObject $CachedCluster -Depth 20

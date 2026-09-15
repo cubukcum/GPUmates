@@ -2,7 +2,10 @@
 param(
     [Parameter(Mandatory)][System.Net.IPAddress]$CoordinatorIP,
     [Parameter(Mandatory)][ValidatePattern('^[A-Za-z0-9 ._-]{1,64}$')][string]$NodeName,
-    [Parameter(Mandatory)][string]$InstallRoot
+    [Parameter(Mandatory)][string]$InstallRoot,
+    [ValidateRange(1024, 65535)][int]$RouterPort = 8080,
+    [ValidateRange(1024, 65535)][int]$DashboardPort = 8090,
+    [ValidateRange(1024, 65535)][int]$ControlPort = 8091
 )
 
 Set-StrictMode -Version Latest
@@ -29,14 +32,34 @@ if ($CoordinatorAddress -notin $LocalIPv4) {
 }
 
 $ResolvedInstallRoot = (Resolve-Path -LiteralPath $InstallRoot -ErrorAction Stop).Path
+Import-Module (Join-Path $PSScriptRoot 'GPUmates.Network.psm1') -Force
+$SavedNetwork = Get-GPUmatesNetworkConfiguration -ProjectRoot $ResolvedInstallRoot
+if (-not $PSBoundParameters.ContainsKey('RouterPort')) { $RouterPort = $SavedNetwork.routerPort }
+if (-not $PSBoundParameters.ContainsKey('DashboardPort')) { $DashboardPort = $SavedNetwork.dashboardPort }
+if (-not $PSBoundParameters.ContainsKey('ControlPort')) { $ControlPort = $SavedNetwork.controlPort }
+if (@(@($RouterPort, $DashboardPort, $ControlPort) | Select-Object -Unique).Count -ne 3) {
+    throw 'Router, dashboard, and Control Center ports must be different.'
+}
 $ConfigRoot = Join-Path $ResolvedInstallRoot 'config'
 $NodeConfigPath = Join-Path $ConfigRoot 'telemetry-nodes.json'
 $ModelPresetPath = Join-Path $ConfigRoot 'gpumates-models.ini'
 New-Item -ItemType Directory -Path $ConfigRoot -Force | Out-Null
 $Utf8NoBom = [Text.UTF8Encoding]::new($false)
+$NetworkConfiguration = [pscustomobject][ordered]@{
+    schemaVersion = 1
+    routerPort = $RouterPort
+    dashboardPort = $DashboardPort
+    controlPort = $ControlPort
+}
+[IO.File]::WriteAllText(
+    (Join-Path $ConfigRoot 'network.json'),
+    (($NetworkConfiguration | ConvertTo-Json) + [Environment]::NewLine),
+    $Utf8NoBom
+)
 
 $NodeConfiguration = [pscustomobject][ordered]@{
     schemaVersion = 1
+    network       = $NetworkConfiguration
     dashboard     = [pscustomobject][ordered]@{
         allowedClientIps = @($CoordinatorAddress)
     }
@@ -52,7 +75,7 @@ $NodeConfiguration = [pscustomobject][ordered]@{
     )
     llama         = [pscustomobject][ordered]@{
         enabled = $true
-        baseUrl = 'http://127.0.0.1:8080'
+        baseUrl = "http://127.0.0.1:$RouterPort"
     }
 }
 $NodeJson = $NodeConfiguration | ConvertTo-Json -Depth 12
@@ -117,3 +140,4 @@ if (Test-Path -LiteralPath $ModelPresetPath -PathType Leaf) {
 }
 
 Write-Host "GPUmates Coordinator seed configuration prepared for $($NodeName.Trim()) at $CoordinatorAddress."
+Write-Host "Ports: chat/API $RouterPort, dashboard $DashboardPort, local Control Center $ControlPort."

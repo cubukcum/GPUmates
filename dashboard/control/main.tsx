@@ -33,6 +33,7 @@ type SharingState = {
   chatClientIps?: string[];
   dashboardClientIps?: string[];
   restartRequired?: boolean;
+  firewallUpdateRequired?: boolean;
   message?: string;
 };
 
@@ -692,11 +693,12 @@ function ControlCenter() {
           <header><div><p className="eyebrow">LAN ACCESS</p><h2 id="sharing-title">Sharing</h2></div><StatusPill online={sharingEnabled}>{sharingEnabled ? "LAN CHAT ON" : "CHAT: PC1 ONLY"}</StatusPill></header>
           <Switch checked={sharingEnabled} onChange={(checked) => changeSharing(() => setSharingEnabled(checked))} label="Share the chat / model UI on LAN" />
           <p className="panelIntro">The toggle controls chat access. The node-dashboard viewer list is applied independently. Only exact client addresses below are admitted.</p>
-          <label className="textAreaField"><span>Chat / model UI client IPs</span><small>Port 8080 · one IP per line or comma-separated</small><textarea rows={4} value={chatIps} onChange={(event) => changeSharing(() => setChatIps(event.target.value))} placeholder={"172.25.50.49\n172.25.50.60"} /></label>
-          <label className="textAreaField"><span>Node dashboard client IPs</span><small>Port 8090 · complete viewer list</small><textarea rows={4} value={dashboardIps} onChange={(event) => changeSharing(() => setDashboardIps(event.target.value))} placeholder={"172.25.50.49\n172.25.50.60"} /></label>
+          <label className="textAreaField"><span>Chat / model UI client IPs</span><small>Port {settingsDraft.routerPort} · one IP per line or comma-separated</small><textarea rows={4} value={chatIps} onChange={(event) => changeSharing(() => setChatIps(event.target.value))} placeholder={"172.25.50.49\n172.25.50.60"} /></label>
+          <label className="textAreaField"><span>Node dashboard client IPs</span><small>Port {settingsDraft.dashboardPort} · complete viewer list</small><textarea rows={4} value={dashboardIps} onChange={(event) => changeSharing(() => setDashboardIps(event.target.value))} placeholder={"172.25.50.49\n172.25.50.60"} /></label>
           <div className="uacNote"><span>UAC</span><p>Apply may open a Windows elevation prompt because PC1 must recreate narrow firewall rules. Submit the complete client lists every time.</p></div>
+          {snapshot?.sharing?.firewallUpdateRequired && <p className="resultNote" role="status">Apply sharing &amp; firewall to update network access for the selected ports.</p>}
           {sharingResult && <p className="resultNote">{sharingResult}</p>}
-          <button className="primaryButton fullButton" type="button" disabled={busy !== null || !sharingChanged} onClick={() => void applySharing()}>{busy === "sharing-apply" ? "Applying…" : "Apply sharing & firewall"}</button>
+          <button className="primaryButton fullButton" type="button" disabled={busy !== null || (!sharingChanged && !snapshot?.sharing?.firewallUpdateRequired)} onClick={() => void applySharing()}>{busy === "sharing-apply" ? "Applying…" : "Apply sharing & firewall"}</button>
         </article>
 
         <article className="panel" aria-labelledby="settings-title">
@@ -706,8 +708,8 @@ function ControlCenter() {
             <label><span>Context size</span><small>512–1,048,576 tokens</small><input type="number" min="512" max="1048576" step="512" value={settingsDraft.contextSize} onChange={(event) => settingsChange("contextSize", event.target.value)} /></label>
             <label><span>Tensor split</span><small>Optional proportions</small><input value={settingsDraft.tensorSplit} onChange={(event) => settingsChange("tensorSplit", event.target.value)} placeholder="Automatic" /></label>
             <label><span>RPC port</span><small>Fixed worker compute port</small><input className="fixedInput" type="number" value={settingsDraft.rpcPort} readOnly aria-readonly="true" /></label>
-            <label><span>Router port</span><small>Fixed chat / API port</small><input className="fixedInput" type="number" value={settingsDraft.routerPort} readOnly aria-readonly="true" /></label>
-            <label><span>Dashboard port</span><small>Fixed node UI port</small><input className="fixedInput" type="number" value={settingsDraft.dashboardPort} readOnly aria-readonly="true" /></label>
+            <label><span>Router port</span><small>Chat / API · change in Setup</small><input className="fixedInput" type="number" value={settingsDraft.routerPort} readOnly aria-readonly="true" /></label>
+            <label><span>Dashboard port</span><small>Node UI · change in Setup</small><input className="fixedInput" type="number" value={settingsDraft.dashboardPort} readOnly aria-readonly="true" /></label>
             <div className="settingsSummary"><span>Selected workers</span><strong>{selectedIps.length}</strong><small>{selectedIps.length ? selectedIps.join(", ") : "PC1 GPU only"}</small></div>
             <div className="autoStartOptions"><span>After Control Center starts</span><Switch checked={settingsDraft.autoStartRouter} onChange={(checked) => settingsToggle("autoStartRouter", checked)} label="Auto-start model router" /><Switch checked={settingsDraft.autoStartDashboard} onChange={(checked) => settingsToggle("autoStartDashboard", checked)} label="Auto-start node dashboard" /></div>
             <button className="primaryButton fullButton" type="submit" disabled={busy !== null || (!settingsChanged && !selectionChanged)}>{busy === "settings-save" ? "Saving…" : "Save defaults"}</button>

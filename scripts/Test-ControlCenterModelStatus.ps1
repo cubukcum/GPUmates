@@ -3,6 +3,8 @@ param()
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'GPUmates.Network.psm1') -Force
+$script:NetworkConfiguration = Get-GPUmatesNetworkConfiguration -ProjectRoot (Split-Path -Parent $PSScriptRoot)
 
 # Load the real functions without starting a server or touching installed state.
 $SourcePath = Join-Path $PSScriptRoot 'Start-GPUmatesControlCenter.ps1'

@@ -13,6 +13,7 @@ $script:DataAclTightened = $false
 
 Add-Type -AssemblyName System.Security
 Import-Module (Join-Path $PSScriptRoot 'GPUmates.Telemetry.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'GPUmates.Network.psm1') -Force
 
 function Get-ObjectProperty {
     param(
@@ -395,6 +396,8 @@ function Get-ControlConfiguration {
             lanChatEnabled     = [bool](Get-ObjectProperty -InputObject $RawSharing -Name 'lanChatEnabled' -DefaultValue $false)
             chatClientIps      = @($ChatClients)
             dashboardClientIps = @($DashboardClients)
+            appliedRouterPort  = [int](Get-ObjectProperty -InputObject $RawSharing -Name 'appliedRouterPort' -DefaultValue 8080)
+            appliedDashboardPort = [int](Get-ObjectProperty -InputObject $RawSharing -Name 'appliedDashboardPort' -DefaultValue 8090)
         }
         settings           = [pscustomobject][ordered]@{
             autoStartRouter    = [bool](Get-ObjectProperty -InputObject $RawSettings -Name 'autoStartRouter' -DefaultValue $false)
@@ -431,6 +434,13 @@ if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
     $ProjectRoot = Split-Path -Parent $PSScriptRoot
 }
 $script:ProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot -ErrorAction Stop).Path
+$script:NetworkConfiguration = Get-GPUmatesNetworkConfiguration -ProjectRoot $script:ProjectRoot
+if (-not $PSBoundParameters.ContainsKey('Port')) {
+    $Port = $script:NetworkConfiguration.controlPort
+}
+if ($Port -in @($script:NetworkConfiguration.routerPort, $script:NetworkConfiguration.dashboardPort)) {
+    throw 'The Control Center port must differ from the chat and dashboard ports.'
+}
 if ([string]::IsNullOrWhiteSpace($DataRoot)) {
     $DataRoot = Join-Path $env:LOCALAPPDATA 'GPUmates\Coordinator'
 }
@@ -577,7 +587,7 @@ function Get-ProcessCommandLine {
 function Get-ManagedServiceState {
     param([Parameter(Mandatory)][ValidateSet('router', 'dashboard')][string]$Service)
 
-    $PortNumber = if ($Service -eq 'router') { 8080 } else { 8090 }
+    $PortNumber = if ($Service -eq 'router') { $script:NetworkConfiguration.routerPort } else { $script:NetworkConfiguration.dashboardPort }
     $OwnerIds = @(Get-ListeningOwnerIds -PortNumber $PortNumber)
     if ($OwnerIds.Count -eq 0) {
         return [pscustomobject][ordered]@{
@@ -864,11 +874,11 @@ function Start-RouterService {
         schemaVersion = 1
         workerIps     = @($Configuration.selectedWorkerIps)
         listenHost    = $ListenHost
-        port          = 8080
+        port          = $script:NetworkConfiguration.routerPort
         contextSize   = [int]$Configuration.settings.contextSize
         presetPath    = $script:ModelPresetPath
         tensorSplit   = [string]$Configuration.settings.tensorSplit
-        dashboardBaseUrl = 'http://{0}:8090' -f $Configuration.coordinatorIP
+        dashboardBaseUrl = 'http://{0}:{1}' -f $Configuration.coordinatorIP, $script:NetworkConfiguration.dashboardPort
     }
     Write-JsonAtomic -Path $script:RouterRuntimeConfigPath -Value $RuntimeConfiguration
 
@@ -918,8 +928,9 @@ function Start-DashboardService {
         $Environment.GPUMATES_LLAMA_API_KEY = [string]$Secrets.LlamaApiKey
     }
     $DashboardScript = Join-Path $script:ProjectRoot 'scripts\Start-GPUmatesDashboard.ps1'
-    $Arguments = '-ListenIP {0} -Port 8090 -NodeConfig {1}' -f `
+    $Arguments = '-ListenIP {0} -Port {1} -NodeConfig {2}' -f `
         (Quote-PowerShellArgument -Value $Configuration.coordinatorIP),
+        $script:NetworkConfiguration.dashboardPort,
         (Quote-PowerShellArgument -Value $script:NodeConfigPath)
     $Launch = Start-HiddenPowerShellScript `
         -Service dashboard `
@@ -943,7 +954,7 @@ function Start-DashboardService {
 function Get-RouterBaseUrl {
     $Configuration = Get-ControlConfiguration
     $HostAddress = if ($Configuration.sharing.lanChatEnabled) { $Configuration.coordinatorIP } else { '127.0.0.1' }
-    return "http://$HostAddress`:8080"
+    return "http://$HostAddress`:$($script:NetworkConfiguration.routerPort)"
 }
 
 function Invoke-RouterRequest {
@@ -1260,7 +1271,7 @@ function Assert-ModelLibraryEditable {
         throw 'Stop the model router (which unloads its active model) before changing the model library.'
     }
     if ($RouterState.conflict) {
-        throw 'TCP 8080 is occupied by another process. Stop that router or listener before changing the model library.'
+        throw "TCP $($script:NetworkConfiguration.routerPort) is occupied by another process. Stop that router or listener before changing the model library."
     }
 }
 
@@ -1542,43 +1553,47 @@ function Remove-WorkerNode {
 function Set-DashboardLlamaConfiguration {
     param(
         [Parameter(Mandatory)][bool]$LanChatEnabled,
-        [Parameter(Mandatory)][string[]]$DashboardClientIps
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$DashboardClientIps
     )
 
     $NodeConfiguration = Read-NodeConfiguration
+    $PreviousJson = $NodeConfiguration | ConvertTo-Json -Depth 30 -Compress
+    $NodeConfiguration | Add-Member -NotePropertyName network -NotePropertyValue $script:NetworkConfiguration -Force
     $CoordinatorIP = Get-CoordinatorIPText
     $NodeConfiguration.dashboard.allowedClientIps = @(
         @($CoordinatorIP) + @($DashboardClientIps) | Select-Object -Unique
     )
     $Llama = Get-ObjectProperty -InputObject $NodeConfiguration -Name 'llama'
     if ($null -eq $Llama) {
-        $Llama = [pscustomobject][ordered]@{ enabled = $true; baseUrl = 'http://127.0.0.1:8080' }
+        $Llama = [pscustomobject][ordered]@{ enabled = $true; baseUrl = "http://127.0.0.1:$($script:NetworkConfiguration.routerPort)" }
         $NodeConfiguration | Add-Member -NotePropertyName llama -NotePropertyValue $Llama
     }
     $Llama.enabled = $true
     if ($LanChatEnabled) {
-        $Llama.baseUrl = "http://$CoordinatorIP`:8080"
+        $Llama.baseUrl = "http://$CoordinatorIP`:$($script:NetworkConfiguration.routerPort)"
         if ($null -eq $Llama.PSObject.Properties['publicUrl']) {
-            $Llama | Add-Member -NotePropertyName publicUrl -NotePropertyValue "http://$CoordinatorIP`:8080"
+            $Llama | Add-Member -NotePropertyName publicUrl -NotePropertyValue $Llama.baseUrl
         }
         else {
-            $Llama.publicUrl = "http://$CoordinatorIP`:8080"
+            $Llama.publicUrl = $Llama.baseUrl
         }
     }
     else {
-        $Llama.baseUrl = 'http://127.0.0.1:8080'
+        $Llama.baseUrl = "http://127.0.0.1:$($script:NetworkConfiguration.routerPort)"
         if ($null -ne $Llama.PSObject.Properties['publicUrl']) {
             $Llama.PSObject.Properties.Remove('publicUrl')
         }
     }
-    Write-JsonAtomic -Path $script:NodeConfigPath -Value $NodeConfiguration -Backup
+    if (($NodeConfiguration | ConvertTo-Json -Depth 30 -Compress) -cne $PreviousJson) {
+        Write-JsonAtomic -Path $script:NodeConfigPath -Value $NodeConfiguration -Backup
+    }
 }
 
 function Invoke-ElevatedSharingHelper {
     param(
         [Parameter(Mandatory)][bool]$LanChatEnabled,
-        [Parameter(Mandatory)][string[]]$ChatClientIps,
-        [Parameter(Mandatory)][string[]]$DashboardClientIps
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$ChatClientIps,
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$DashboardClientIps
     )
 
     $Request = [pscustomobject][ordered]@{
@@ -1647,6 +1662,8 @@ function Apply-SharingConfiguration {
     $Configuration.sharing.lanChatEnabled = $Enabled
     $Configuration.sharing.chatClientIps = @($ChatClients)
     $Configuration.sharing.dashboardClientIps = @($DashboardClients)
+    $Configuration.sharing.appliedRouterPort = $script:NetworkConfiguration.routerPort
+    $Configuration.sharing.appliedDashboardPort = $script:NetworkConfiguration.dashboardPort
     Save-ControlConfiguration -Configuration $Configuration
     Set-DashboardLlamaConfiguration -LanChatEnabled $Enabled -DashboardClientIps $DashboardClients
 
@@ -1688,12 +1705,12 @@ function Save-ControlSettings {
     $Configuration.settings.tensorSplit = $TensorSplit
     foreach ($FixedPort in @(
             @('rpcPort', 50052),
-            @('routerPort', 8080),
-            @('dashboardPort', 8090)
+            @('routerPort', $script:NetworkConfiguration.routerPort),
+            @('dashboardPort', $script:NetworkConfiguration.dashboardPort)
         )) {
         $RequestedPort = Get-ObjectProperty -InputObject $SettingsBody -Name $FixedPort[0] -DefaultValue $FixedPort[1]
         if ([int]$RequestedPort -ne [int]$FixedPort[1]) {
-            throw "$($FixedPort[0]) is fixed at $($FixedPort[1]) in this release."
+            throw "$($FixedPort[0]) is configured as $($FixedPort[1]). Change coordinator ports by rerunning Setup."
         }
     }
     Save-ControlConfiguration -Configuration $Configuration
@@ -1745,13 +1762,13 @@ function Get-ControlStatus {
                 state       = if ($RouterState.running) { 'running' } elseif ($RouterState.conflict) { 'conflict' } else { 'stopped' }
                 mode        = if ($Configuration.sharing.lanChatEnabled) { 'lan' } else { 'local' }
                 activeModel = $ModelStatus.activeModel
-                url         = if ($RouterState.running) { "http://$ChatHost`:8080" } else { $null }
+                url         = if ($RouterState.running) { "http://$ChatHost`:$($script:NetworkConfiguration.routerPort)" } else { $null }
                 error       = $RouterState.error
             }
             dashboard = [pscustomobject][ordered]@{
                 running = [bool]$DashboardState.running
                 state   = if ($DashboardState.running) { 'running' } elseif ($DashboardState.conflict) { 'conflict' } else { 'stopped' }
-                url     = if ($DashboardState.running) { "http://$($Configuration.coordinatorIP):8090" } else { $null }
+                url     = if ($DashboardState.running) { "http://$($Configuration.coordinatorIP):$($script:NetworkConfiguration.dashboardPort)" } else { $null }
                 error   = $DashboardState.error
             }
         }
@@ -1768,19 +1785,22 @@ function Get-ControlStatus {
             lanAccess          = [bool]$Configuration.sharing.lanChatEnabled
             chatClientIps      = @($Configuration.sharing.chatClientIps)
             dashboardClientIps = @($Configuration.sharing.dashboardClientIps)
+            firewallUpdateRequired = $Configuration.sharing.appliedRouterPort -ne $script:NetworkConfiguration.routerPort -or
+                $Configuration.sharing.appliedDashboardPort -ne $script:NetworkConfiguration.dashboardPort
         }
         settings      = [pscustomobject][ordered]@{
             contextSize        = [int]$Configuration.settings.contextSize
             tensorSplit        = Get-ObjectProperty -InputObject $Configuration.settings -Name 'tensorSplit'
             rpcPort             = 50052
-            routerPort          = 8080
-            dashboardPort       = 8090
+            routerPort          = $script:NetworkConfiguration.routerPort
+            dashboardPort       = $script:NetworkConfiguration.dashboardPort
+            controlPort         = $Port
             autoStartRouter     = [bool]$Configuration.settings.autoStartRouter
             autoStartDashboard  = [bool]$Configuration.settings.autoStartDashboard
         }
         urls          = [pscustomobject][ordered]@{
-            chat     = if ($RouterState.running) { "http://$ChatHost`:8080" } else { $null }
-            dashboard = if ($DashboardState.running) { "http://$($Configuration.coordinatorIP):8090" } else { $null }
+            chat     = if ($RouterState.running) { "http://$ChatHost`:$($script:NetworkConfiguration.routerPort)" } else { $null }
+            dashboard = if ($DashboardState.running) { "http://$($Configuration.coordinatorIP):$($script:NetworkConfiguration.dashboardPort)" } else { $null }
             control  = "http://127.0.0.1`:$Port"
         }
         lastError     = $script:LastError
@@ -2019,6 +2039,11 @@ function Read-ControlJsonBody {
     }
     return $Request.bodyText | ConvertFrom-Json -ErrorAction Stop
 }
+
+# Refresh the per-user copy after Setup changes the installation's ports.
+$StartupConfiguration = Get-ControlConfiguration
+Set-DashboardLlamaConfiguration -LanChatEnabled $StartupConfiguration.sharing.lanChatEnabled `
+    -DashboardClientIps @($StartupConfiguration.sharing.dashboardClientIps)
 
 $IdentitySid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value -replace '[^A-Za-z0-9_-]', '_'
 $MutexCreated = $false

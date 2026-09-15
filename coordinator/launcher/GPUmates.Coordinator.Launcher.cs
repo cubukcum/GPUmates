@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -8,6 +9,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
 [assembly: AssemblyTitle("GPUmates Coordinator")]
@@ -21,9 +23,9 @@ namespace GPUmates.Coordinator.Launcher
 {
     public static class Program
     {
-        private const string HealthUrl = "http://127.0.0.1:8091/health";
-        private const string ControlCenterUrl = "http://127.0.0.1:8091/";
-        private const int ControlCenterPort = 8091;
+        private static int ControlCenterPort = 8091;
+        private static string ControlCenterUrl { get { return "http://127.0.0.1:" + ControlCenterPort + "/"; } }
+        private static string HealthUrl { get { return ControlCenterUrl + "health"; } }
         private const int StartupTimeoutMilliseconds = 15000;
         private const string StartupMutexName = @"Local\GPUmates.Coordinator.Launcher.Startup";
         private const string ControlCenterScriptRelativePath = @"scripts\Start-GPUmatesControlCenter.ps1";
@@ -51,6 +53,16 @@ namespace GPUmates.Coordinator.Launcher
 
         private static void LaunchControlCenter()
         {
+            string projectRoot = FindProjectRoot();
+            if (projectRoot == null)
+            {
+                throw new FileNotFoundException(
+                    "Could not find " + ControlCenterScriptRelativePath +
+                    " by walking upward from:\r\n" + GetLauncherDirectory() +
+                    "\r\n\r\nKeep GPUmates-Coordinator.exe inside the complete GPUmates project or coordinator package.");
+            }
+            ControlCenterPort = ReadControlCenterPort(projectRoot);
+
             string healthySessionId = GetHealthySessionId(600);
             if (healthySessionId != null)
             {
@@ -92,15 +104,6 @@ namespace GPUmates.Coordinator.Launcher
 
                     if (!portWasAlreadyInUse)
                     {
-                        string projectRoot = FindProjectRoot();
-                        if (projectRoot == null)
-                        {
-                            throw new FileNotFoundException(
-                                "Could not find " + ControlCenterScriptRelativePath +
-                                " by walking upward from:\r\n" + GetLauncherDirectory() +
-                                "\r\n\r\nKeep GPUmates-Coordinator.exe inside the complete GPUmates project or coordinator package.");
-                        }
-
                         controlCenterProcess = StartControlCenter(projectRoot);
                     }
 
@@ -110,7 +113,7 @@ namespace GPUmates.Coordinator.Launcher
                         if (portWasAlreadyInUse)
                         {
                             throw new InvalidOperationException(
-                                "TCP port 8091 is already in use, but the GPUmates health check is unavailable at " +
+                                "TCP port " + ControlCenterPort + " is already in use, but the GPUmates health check is unavailable at " +
                                 HealthUrl + ".\r\n\r\nStop the conflicting or unresponsive process and try again.");
                         }
 
@@ -137,6 +140,52 @@ namespace GPUmates.Coordinator.Launcher
                     }
                 }
             }
+        }
+
+        private static int ReadControlCenterPort(string projectRoot)
+        {
+            string configurationPath = Path.Combine(projectRoot, @"config\network.json");
+            if (!File.Exists(configurationPath))
+            {
+                return 8091;
+            }
+
+            try
+            {
+                Dictionary<string, object> configuration = new JavaScriptSerializer()
+                    .DeserializeObject(File.ReadAllText(configurationPath, Encoding.UTF8)) as Dictionary<string, object>;
+                object version;
+                if (configuration == null || !configuration.TryGetValue("schemaVersion", out version) ||
+                    !(version is int) || (int)version != 1)
+                {
+                    throw new InvalidDataException("schemaVersion must be 1.");
+                }
+
+                int routerPort = ReadNetworkPort(configuration, "routerPort");
+                int dashboardPort = ReadNetworkPort(configuration, "dashboardPort");
+                int controlPort = ReadNetworkPort(configuration, "controlPort");
+                if (routerPort == dashboardPort || routerPort == controlPort || dashboardPort == controlPort)
+                {
+                    throw new InvalidDataException("Router, dashboard, and Control Center ports must be different.");
+                }
+                return controlPort;
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidDataException(
+                    "Invalid GPUmates network configuration at " + configurationPath + ": " + exception.Message,
+                    exception);
+            }
+        }
+
+        private static int ReadNetworkPort(Dictionary<string, object> configuration, string name)
+        {
+            object value;
+            if (!configuration.TryGetValue(name, out value) || !(value is int) || (int)value < 1024 || (int)value > 65535)
+            {
+                throw new InvalidDataException(name + " must be an integer between 1024 and 65535.");
+            }
+            return (int)value;
         }
 
         private static bool TryAcquireMutex(Mutex startupMutex)
@@ -189,6 +238,17 @@ namespace GPUmates.Coordinator.Launcher
 
         private static Process StartControlCenter(string projectRoot)
         {
+            Process process = Process.Start(CreateControlCenterStartInfo(projectRoot));
+            if (process == null)
+            {
+                throw new InvalidOperationException("Windows could not create the Control Center process.");
+            }
+
+            return process;
+        }
+
+        private static ProcessStartInfo CreateControlCenterStartInfo(string projectRoot)
+        {
             string scriptPath = Path.Combine(projectRoot, ControlCenterScriptRelativePath);
             string windowsPowerShell = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.Windows),
@@ -205,20 +265,15 @@ namespace GPUmates.Coordinator.Launcher
             startInfo.FileName = windowsPowerShell;
             startInfo.Arguments =
                 "-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden " +
-                "-ExecutionPolicy Bypass -File " + QuoteWindowsArgument(scriptPath);
+                "-ExecutionPolicy Bypass -File " + QuoteWindowsArgument(scriptPath) +
+                " -Port " + ControlCenterPort;
             startInfo.WorkingDirectory = projectRoot;
             startInfo.UseShellExecute = false;
             startInfo.CreateNoWindow = true;
             startInfo.WindowStyle = ProcessWindowStyle.Hidden;
             startInfo.ErrorDialog = false;
 
-            Process process = Process.Start(startInfo);
-            if (process == null)
-            {
-                throw new InvalidOperationException("Windows could not create the Control Center process.");
-            }
-
-            return process;
+            return startInfo;
         }
 
         private static string QuoteWindowsArgument(string value)

@@ -44,6 +44,8 @@ try {
     if (-not [string]::Equals($ExpectedHelper, $PSCommandPath, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'The sharing request does not belong to this GPUmates installation.'
     }
+    Import-Module (Join-Path $PSScriptRoot 'GPUmates.Network.psm1') -Force
+    $Network = Get-GPUmatesNetworkConfiguration -ProjectRoot $ProjectRoot
 
     $CoordinatorIP = [System.Net.IPAddress]([string]$Request.coordinatorIP)
     if (-not (Test-PrivateIPv4 -Address $CoordinatorIP)) {
@@ -66,17 +68,17 @@ try {
     $DashboardFirewall = Join-Path $ProjectRoot 'scripts\Configure-DashboardFirewall.ps1'
 
     if ([bool]$Request.lanChatEnabled -and $ChatClients.Count -gt 0) {
-        & $CoordinatorFirewall -CoordinatorIP $CoordinatorIP -ClientIP $ChatClients
+        & $CoordinatorFirewall -CoordinatorIP $CoordinatorIP -ClientIP $ChatClients -Port $Network.routerPort
     }
     else {
-        & $CoordinatorFirewall -Remove
+        & $CoordinatorFirewall -Port $Network.routerPort -Remove
     }
 
     if ($DashboardClients.Count -gt 0) {
-        & $DashboardFirewall -CoordinatorIP $CoordinatorIP -ClientIP $DashboardClients
+        & $DashboardFirewall -CoordinatorIP $CoordinatorIP -ClientIP $DashboardClients -Port $Network.dashboardPort
     }
     else {
-        & $DashboardFirewall -Remove
+        & $DashboardFirewall -Port $Network.dashboardPort -Remove
     }
 
     Write-Output 'Windows Firewall sharing rules were updated.'

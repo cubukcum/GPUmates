@@ -62,6 +62,7 @@ try {
         (Join-Path $FrameworkDirectory 'System.dll')
         (Join-Path $FrameworkDirectory 'System.Core.dll')
         (Join-Path $FrameworkDirectory 'System.Security.dll')
+        (Join-Path $FrameworkDirectory 'System.Web.Extensions.dll')
         (Join-Path $FrameworkDirectory 'System.Windows.Forms.dll')
     )
 

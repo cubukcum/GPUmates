@@ -11,7 +11,21 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
+Import-Module (Join-Path $PSScriptRoot 'GPUmates.Network.psm1') -Force
+if (-not $PSBoundParameters.ContainsKey('Port')) {
+    $Port = (Get-GPUmatesNetworkConfiguration -ProjectRoot $ProjectRoot).dashboardPort
+}
 $RuleName = "GPUmates-Dashboard-$Port"
+
+function Remove-DashboardFirewallRules {
+    foreach ($ExistingRule in @(Get-NetFirewallRule -Name 'GPUmates-Dashboard-*' -ErrorAction SilentlyContinue)) {
+        if ($ExistingRule.Name -match '^GPUmates-Dashboard-\d+$') {
+            Remove-NetFirewallRule -Name $ExistingRule.Name
+            Write-Host "Removed firewall rule $($ExistingRule.Name)."
+        }
+    }
+}
 
 function Assert-PrivateIPv4 {
     param(
@@ -43,14 +57,7 @@ if (-not $Principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 
 if ($Remove) {
-    $ExistingRule = Get-NetFirewallRule -Name $RuleName -ErrorAction SilentlyContinue
-    if ($ExistingRule) {
-        Remove-NetFirewallRule -Name $RuleName
-        Write-Host "Removed firewall rule $RuleName."
-    }
-    else {
-        Write-Host "Firewall rule $RuleName does not exist."
-    }
+    Remove-DashboardFirewallRules
     return
 }
 
@@ -97,10 +104,7 @@ if (-not [string]::IsNullOrWhiteSpace($ProgramPath)) {
     $RuleParameters.Program = $ResolvedProgram
 }
 
-$ExistingRule = Get-NetFirewallRule -Name $RuleName -ErrorAction SilentlyContinue
-if ($ExistingRule) {
-    Remove-NetFirewallRule -Name $RuleName
-}
+Remove-DashboardFirewallRules
 
 New-NetFirewallRule @RuleParameters | Out-Null
 

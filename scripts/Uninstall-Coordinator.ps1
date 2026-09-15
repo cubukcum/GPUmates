@@ -50,9 +50,9 @@ function Stop-ExpectedListener {
         else {
             $Marker = if ($Service -eq 'dashboard') { 'Start-GPUmatesDashboard.ps1' } else { 'Start-GPUmatesControlCenter.ps1' }
             $CommandLine = Get-CommandLine -ProcessId $ProcessId
+            $ExpectedScript = [regex]::Escape((Join-Path $ProjectRoot "scripts\$Marker"))
             $Expected = -not [string]::IsNullOrWhiteSpace($CommandLine) -and
-                $CommandLine.IndexOf((Join-Path $ProjectRoot 'scripts'), [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
-                $CommandLine.IndexOf($Marker, [StringComparison]::OrdinalIgnoreCase) -ge 0
+                $CommandLine -match ('(?i)(?:^|\s)-File\s+(?:"' + $ExpectedScript + '"|' + $ExpectedScript + ')(?=\s|$)')
         }
 
         if ($Expected) {
@@ -67,9 +67,13 @@ if (-not $Principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     throw 'Coordinator cleanup must run as Administrator.'
 }
 
-Stop-ExpectedListener -Port 8080 -Service router
-Stop-ExpectedListener -Port 8090 -Service dashboard
-Stop-ExpectedListener -Port 8091 -Service control
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
+Import-Module (Join-Path $PSScriptRoot 'GPUmates.Network.psm1') -Force
+$Network = Get-GPUmatesNetworkConfiguration -ProjectRoot $ProjectRoot
 
-& (Join-Path $PSScriptRoot 'Configure-CoordinatorFirewall.ps1') -Remove
-& (Join-Path $PSScriptRoot 'Configure-DashboardFirewall.ps1') -Remove
+Stop-ExpectedListener -Port $Network.routerPort -Service router
+Stop-ExpectedListener -Port $Network.dashboardPort -Service dashboard
+Stop-ExpectedListener -Port $Network.controlPort -Service control
+
+& (Join-Path $PSScriptRoot 'Configure-CoordinatorFirewall.ps1') -Port $Network.routerPort -Remove
+& (Join-Path $PSScriptRoot 'Configure-DashboardFirewall.ps1') -Port $Network.dashboardPort -Remove

@@ -20,9 +20,9 @@ Copy-pasteable single-line commands are in
 - Worker: PC2, `DESKTOP-1K2PL3G`
 - Worker IPv4: `172.25.50.49/24` (reachable from the coordinator)
 - RPC port: TCP `50052`
-- Local UI/API port: TCP `8080`
-- GPU dashboard port: TCP `8090`
-- PC1-only Control Center port: TCP `8091`
+- Local UI/API default port: TCP `8080` (selectable in Setup)
+- GPU dashboard default port: TCP `8090` (selectable in Setup)
+- PC1-only Control Center default port: TCP `8091` (selectable in Setup)
 - Worker telemetry port: TCP `9835`
 
 The runtime in `runtime/` has already been validated against this PC's RTX 5070
@@ -59,6 +59,20 @@ from **Model library**. That library can also add or remove PC1-local GGUF
 presets through a native file picker while the router is stopped. LAN chat and
 dashboard access are granted only to exact client IPs through **Sharing**, which
 opens a UAC prompt for the narrow firewall change.
+
+Setup asks for the chat/API, dashboard, and local Control Center ports. Keep
+the defaults if they are free, or choose three different ports from 1024 to
+65535. Setup checks availability before installing and reports the occupied
+address and port so you can go back and choose another. The launcher, URLs,
+and chat GPU statistics use the saved choices in `config/network.json`.
+
+To let other PCs connect, open **Sharing**, enable LAN chat, enter each allowed
+PC's private IPv4 address in the chat and/or dashboard client list, and apply.
+Windows Firewall rules use your selected ports and exact client IPs. Use the
+URLs shown in the Control Center. The administration page stays local to PC1.
+After changing ports by rerunning Setup, apply Sharing again to update the
+rules, and update worker dashboard shortcuts to match. Examples below use the
+default ports.
 
 GPUmates does not install these components as Windows services or launch them
 at Windows sign-in. After a reboot, worker owners start their worker windows

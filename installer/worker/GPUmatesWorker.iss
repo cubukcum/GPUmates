@@ -87,6 +87,7 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -N
 Type: filesandordirs; Name: "{commonappdata}\GPUmates\Worker"
 
 [Registry]
+Root: HKLM; Subkey: "Software\GPUmates\Worker"; ValueType: string; ValueName: "DashboardPort"; ValueData: "{code:GetDashboardPort}"; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "Software\GPUmates\Worker"; ValueType: dword; ValueName: "CacheEnabled"; ValueData: "{code:GetCacheEnabledRegistryValue}"; Flags: uninsdeletevalue uninsdeletekeyifempty
 
 [Code]
@@ -188,6 +189,8 @@ begin
 end;
 
 procedure InitializeWizard;
+var
+  DashboardPort: String;
 begin
   NetworkPage := CreateInputQueryPage(
     wpSelectDir,
@@ -201,6 +204,12 @@ begin
   NetworkPage.Values[1] := '172.25.50.14';
   NetworkPage.Add('This worker PC IPv4:', False);
   NetworkPage.Values[2] := DetectWorkerIP;
+  NetworkPage.Add('Main PC dashboard port:', False);
+  DashboardPort := Trim(ExpandConstant('{param:DASHBOARDPORT|}'));
+  if DashboardPort = '' then
+    RegQueryStringValue(HKLM64, 'Software\GPUmates\Worker', 'DashboardPort', DashboardPort);
+  if DashboardPort = '' then DashboardPort := '8090';
+  NetworkPage.Values[3] := DashboardPort;
 
   CachePage := CreateInputOptionPage(
     NetworkPage.ID,
@@ -286,6 +295,14 @@ begin
   if CurPageID <> NetworkPage.ID then
     Exit;
 
+  if (StrToIntDef(Trim(NetworkPage.Values[3]), -1) < 1024) or
+     (StrToIntDef(Trim(NetworkPage.Values[3]), -1) > 65535) then
+  begin
+    MsgBox('Main PC dashboard port must be a whole number from 1024 to 65535.', mbError, MB_OK);
+    Result := False;
+    Exit;
+  end;
+
   if not IsValidNodeName(NetworkPage.Values[0]) then
   begin
     MsgBox('Worker name may contain only letters, numbers, spaces, dots, underscores, and hyphens.', mbError, MB_OK);
@@ -326,9 +343,14 @@ begin
   Result := Trim(NetworkPage.Values[0]);
 end;
 
+function GetDashboardPort(Param: String): String;
+begin
+  Result := IntToStr(StrToIntDef(Trim(NetworkPage.Values[3]), -1));
+end;
+
 function GetDashboardUrl(Param: String): String;
 begin
-  Result := 'http://' + GetCoordinatorIP('') + ':8090';
+  Result := 'http://' + GetCoordinatorIP('') + ':' + GetDashboardPort('');
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -341,6 +363,12 @@ var
   ResultCode: Integer;
 begin
   Result := '';
+  if (StrToIntDef(GetDashboardPort(''), -1) < 1024) or
+     (StrToIntDef(GetDashboardPort(''), -1) > 65535) then
+  begin
+    Result := 'Main PC dashboard port must be a whole number from 1024 to 65535.';
+    Exit;
+  end;
   if WizardSilent and (GetCacheParameter = '') then
   begin
     Result := 'Silent Worker setup requires /CACHE=1 or /CACHE=0.';

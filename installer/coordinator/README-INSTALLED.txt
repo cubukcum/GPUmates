@@ -19,9 +19,12 @@ The Control Center lets PC1:
 PC1 needs Windows 11 x64, a current NVIDIA driver, a usable NVIDIA GPU, and
 the Microsoft Visual C++ v14 x64 runtime. GGUF model files are not bundled.
 
-The administration page is bound only to 127.0.0.1:8091. It is never exposed
-to other PCs. Other users receive only the model UI on TCP 8080 and/or the
-read-only node dashboard on TCP 8090 when PC1 explicitly allows their fixed IP.
+Setup lets you choose the chat, dashboard, and Control Center ports. The
+administration page stays on 127.0.0.1 (default port 8091). Other PCs receive
+the model UI (default port 8080) and/or read-only dashboard (default port 8090)
+when PC1 explicitly allows their fixed IP through Sharing. Use the URLs shown
+in the Control Center. After changing ports in Setup, apply Sharing & firewall
+again to update the rules. All port examples in this guide use the defaults.
 
 The first-run key screen generates three different keys. Save them in a
 password manager before leaving the screen. Give the AgentKey only to worker

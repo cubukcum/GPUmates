@@ -28,7 +28,7 @@ try {
     $SourceAsset = Join-Path $TemplateRoot 'assets\chat.js'
     [IO.File]::WriteAllText($SourceAsset, 'initial asset', $Utf8)
 
-    $Prepared = & $Helper -TemplateRoot $TemplateRoot -OutputRoot $OutputRoot -DashboardBaseUrl 'http://192.168.1.14:8090/'
+    $Prepared = & $Helper -DashboardPort 8090 -TemplateRoot $TemplateRoot -OutputRoot $OutputRoot -DashboardBaseUrl 'http://192.168.1.14:8090/'
     Assert-Condition ($Prepared -eq $OutputRoot) 'Helper must return its dedicated output directory.'
     $IndexPath = Join-Path $OutputRoot 'index.html'
     $WorkerPath = Join-Path $OutputRoot 'sw.js'
@@ -42,7 +42,7 @@ try {
     # Lock the unchanged asset against writes. A repeat launch must skip copying it.
     $LockedAsset = [IO.File]::Open($AssetPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
     try {
-        & $Helper -TemplateRoot $TemplateRoot -OutputRoot $OutputRoot -DashboardBaseUrl 'http://10.0.0.14:8090' | Out-Null
+        & $Helper -DashboardPort 8090 -TemplateRoot $TemplateRoot -OutputRoot $OutputRoot -DashboardBaseUrl 'http://10.0.0.14:8090' | Out-Null
     }
     finally { $LockedAsset.Dispose() }
     $UpdatedHash = (Get-FileHash -LiteralPath $IndexPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -50,11 +50,11 @@ try {
     Assert-Condition ([IO.File]::ReadAllText($WorkerPath).Contains($UpdatedHash)) 'Changing dashboard address must update the cached index revision.'
 
     [IO.File]::WriteAllText($SourceAsset, 'updated asset with different length', $Utf8)
-    & $Helper -TemplateRoot $TemplateRoot -OutputRoot $OutputRoot -DashboardBaseUrl 'http://localhost:8090' | Out-Null
+    & $Helper -DashboardPort 8090 -TemplateRoot $TemplateRoot -OutputRoot $OutputRoot -DashboardBaseUrl 'http://localhost:8090' | Out-Null
     Assert-Condition ([IO.File]::ReadAllText($AssetPath) -eq 'updated asset with different length') 'Updated build assets must replace prepared copies.'
 
     foreach ($Address in @('http://127.0.0.1:8090', 'http://172.16.0.1:8090', 'http://172.31.255.254:8090')) {
-        & $Helper -TemplateRoot $TemplateRoot -OutputRoot $OutputRoot -DashboardBaseUrl $Address | Out-Null
+        & $Helper -DashboardPort 8090 -TemplateRoot $TemplateRoot -OutputRoot $OutputRoot -DashboardBaseUrl $Address | Out-Null
     }
     $RejectedUrls = @(
         'https://192.168.1.14:8090', 'http://8.8.8.8:8090', 'http://0.0.0.0:8090',
@@ -65,13 +65,24 @@ try {
     )
     foreach ($Address in $RejectedUrls) {
         $Rejected = $false
-        try { & $Helper -TemplateRoot $TemplateRoot -OutputRoot $OutputRoot -DashboardBaseUrl $Address | Out-Null }
+        try { & $Helper -DashboardPort 8090 -TemplateRoot $TemplateRoot -OutputRoot $OutputRoot -DashboardBaseUrl $Address | Out-Null }
         catch { $Rejected = $true }
         Assert-Condition $Rejected "Dashboard URL should be rejected: $Address"
     }
+    $DefaultPortHash = (Get-FileHash -LiteralPath $IndexPath -Algorithm SHA256).Hash
+    & $Helper -DashboardPort 18090 -TemplateRoot $TemplateRoot -OutputRoot $OutputRoot -DashboardBaseUrl 'http://127.0.0.1:18090/' | Out-Null
+    $CustomPortHash = (Get-FileHash -LiteralPath $IndexPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    Assert-Condition ([IO.File]::ReadAllText($IndexPath).Contains('content="http://127.0.0.1:18090"')) 'A selected custom dashboard port must reach the chat index.'
+    Assert-Condition ($CustomPortHash -ne $DefaultPortHash -and [IO.File]::ReadAllText($WorkerPath).Contains($CustomPortHash)) 'A changed dashboard port must refresh the cached index revision.'
+    foreach ($Address in @('http://127.0.0.1:8090', 'http://127.0.0.1:18091', 'http://8.8.8.8:18090', 'http://user@127.0.0.1:18090', 'http://127.0.0.1:18090/path')) {
+        $Rejected = $false
+        try { & $Helper -DashboardPort 18090 -TemplateRoot $TemplateRoot -OutputRoot $OutputRoot -DashboardBaseUrl $Address | Out-Null }
+        catch { $Rejected = $true }
+        Assert-Condition $Rejected "Custom dashboard configuration must reject unselected ports and unsafe URLs: $Address"
+    }
     foreach ($UnsafeOutput in @($TemplateRoot, (Join-Path $TemplateRoot 'nested'), $TestRoot)) {
         $Rejected = $false
-        try { & $Helper -TemplateRoot $TemplateRoot -OutputRoot $UnsafeOutput -DashboardBaseUrl 'http://127.0.0.1:8090' | Out-Null }
+        try { & $Helper -DashboardPort 8090 -TemplateRoot $TemplateRoot -OutputRoot $UnsafeOutput -DashboardBaseUrl 'http://127.0.0.1:8090' | Out-Null }
         catch { $Rejected = $true }
         Assert-Condition $Rejected 'Overlapping template and output directories must be rejected.'
     }

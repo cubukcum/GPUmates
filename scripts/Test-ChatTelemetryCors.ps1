@@ -97,6 +97,7 @@ function Assert-Cors {
     Assert-Test ($Response.headers['x-frame-options'] -eq 'DENY') 'Dashboard X-Frame-Options must remain DENY.'
 }
 
+foreach ($RouterPort in @(8080, 18080)) {
 $TestRoot = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('gpumates-chat-cors-' + [Guid]::NewGuid().ToString('N'))))
 $ExpectedParent = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
 Assert-Test ($TestRoot.StartsWith($ExpectedParent, [StringComparison]::OrdinalIgnoreCase)) 'Tests must stay inside the temporary directory.'
@@ -115,13 +116,14 @@ try {
         Where-Object { $_.Address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork -and $_.Address.IPAddressToString -match '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)' } |
         ForEach-Object { $_.Address.IPAddressToString } | Select-Object -First 1)
     $CoordinatorAddress = if ($CoordinatorIP.Count -gt 0) { $CoordinatorIP[0] } else { '127.0.0.1' }
-    $CoordinatorOrigin = "http://${CoordinatorAddress}:8080"
+    $CoordinatorOrigin = "http://${CoordinatorAddress}:$RouterPort"
     $NodeConfigPath = Join-Path $TestRoot 'nodes.json'
     $StaticRoot = Join-Path $TestRoot 'static'
     New-Item -ItemType Directory -Path $StaticRoot | Out-Null
     [IO.File]::WriteAllText((Join-Path $StaticRoot 'index.html'), '<!doctype html><title>CORS test</title>')
     @{
         schemaVersion = 1
+        network = @{ schemaVersion = 1; routerPort = $RouterPort; dashboardPort = $DashboardPort; controlPort = 8091 }
         dashboard = @{ allowedClientIps = @('127.0.0.1', '127.0.0.2') }
         nodes = @(@{ name = 'Test coordinator'; host = '127.0.0.1'; displayIp = $CoordinatorAddress; port = 9835; local = $true; role = 'coordinator' })
         llama = @{ enabled = $false }
@@ -134,7 +136,7 @@ try {
     } -ArgumentList (Join-Path $PSScriptRoot 'Start-GPUmatesDashboard.ps1'), $NodeConfigPath, $StaticRoot, $DashboardPort, $DashboardKey, $AgentKey
     Wait-TestServer -Port $DashboardPort -Job $DashboardJob
 
-    foreach ($Origin in @($CoordinatorOrigin, 'http://127.0.0.1:8080', 'http://localhost:8080') | Select-Object -Unique) {
+    foreach ($Origin in @($CoordinatorOrigin, "http://127.0.0.1:$RouterPort", "http://localhost:$RouterPort") | Select-Object -Unique) {
         $Preflight = @{ Origin = $Origin; 'Access-Control-Request-Method' = 'GET'; 'Access-Control-Request-Headers' = 'x-gpumates-key' }
         $Response = Invoke-TestHttp -Port $DashboardPort -Method OPTIONS -Headers $Preflight
         Assert-Cors $Response 200 $Origin
@@ -150,8 +152,10 @@ try {
     }
     Write-Host '[PASS] Exact chat origins, preflight, missing/wrong/separate keys, and authenticated cluster access.'
 
-    $TrustedOrigin = 'http://127.0.0.1:8080'
-    foreach ($Origin in @('null', '', 'https://127.0.0.1:8080', 'http://127.0.0.1:8081', 'http://127.0.0.1:8080/', 'http://127.0.0.1:8080.evil.test', 'http://user@127.0.0.1:8080', 'http://127.0.0.2:8080', 'http://evil.test', 'http://127.0.0.1:8080 http://evil.test')) {
+    $TrustedOrigin = "http://127.0.0.1:$RouterPort"
+    $OtherRouterPort = if ($RouterPort -eq 8080) { 18080 } else { 8080 }
+    $RejectedOrigins = @('null', '', "https://127.0.0.1:$RouterPort", "http://127.0.0.1:$OtherRouterPort", "http://${CoordinatorAddress}:$OtherRouterPort", "http://localhost:$OtherRouterPort", "$TrustedOrigin/", "$TrustedOrigin.evil.test", "http://user@127.0.0.1:$RouterPort", "http://127.0.0.2:$RouterPort", 'http://evil.test', "$TrustedOrigin http://evil.test")
+    foreach ($Origin in $RejectedOrigins) {
         foreach ($Method in @('OPTIONS', 'GET')) {
             $Response = Invoke-TestHttp -Port $DashboardPort -Method $Method -Headers @{ Origin = $Origin; 'Access-Control-Request-Method' = 'GET'; 'X-GPUmates-Key' = $DashboardKey }
             Assert-Test ($Response.status -eq 403) 'Untrusted or malformed origins must be denied even with a valid key.'
@@ -244,4 +248,5 @@ finally {
     Remove-Item -LiteralPath $ResolvedTestRoot -Recurse -Force
 }
 
-Write-Host 'All chat telemetry CORS security checks passed.'
+}
+Write-Host 'All chat telemetry CORS security checks passed on default and custom router ports.'

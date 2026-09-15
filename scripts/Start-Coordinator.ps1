@@ -7,7 +7,7 @@ param(
     [int]$ContextSize = 8192,
     [int]$RpcPort = 50052,
     [string]$ListenHost = '127.0.0.1',
-    [int]$Port = 8080,
+    [ValidateRange(1024, 65535)][int]$Port = 8080,
     [string]$ApiKey,
     [string]$TensorSplit
 )
@@ -38,6 +38,10 @@ if ($ListenHost -notin $LoopbackHosts -and [string]::IsNullOrWhiteSpace($ApiKey)
 }
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
+if (-not $PSBoundParameters.ContainsKey('Port')) {
+    Import-Module (Join-Path $PSScriptRoot 'GPUmates.Network.psm1') -Force
+    $Port = (Get-GPUmatesNetworkConfiguration -ProjectRoot $ProjectRoot).routerPort
+}
 $ServerExe = (Resolve-Path -LiteralPath (Join-Path $ProjectRoot 'runtime\llama-server.exe')).Path
 $RpcEndpoints = @(
     $WorkerAddresses | ForEach-Object { '{0}:{1}' -f $_, $RpcPort }

@@ -3,13 +3,37 @@ param(
     [System.Net.IPAddress]$CoordinatorIP,
     [Alias('ClientIPs')]
     [System.Net.IPAddress[]]$ClientIP,
-    [int]$Port = 8080,
+    [ValidateRange(1024, 65535)][int]$Port = 8080,
     [switch]$Remove
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$RuleName = 'GPUmates-LlamaAPI-8080'
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
+Import-Module (Join-Path $PSScriptRoot 'GPUmates.Network.psm1') -Force
+if (-not $PSBoundParameters.ContainsKey('Port')) {
+    $Port = (Get-GPUmatesNetworkConfiguration -ProjectRoot $ProjectRoot).routerPort
+}
+$RuleName = "GPUmates-LlamaAPI-$Port"
+$ExpectedProgram = [IO.Path]::GetFullPath((Join-Path $ProjectRoot 'runtime\llama-server.exe'))
+
+function Remove-InstallationFirewallRules {
+    # The executable path keeps other GPUmates installations' rules untouched.
+    # Remove the entire numeric rule family so changing custom ports revokes the
+    # previous port as well as installations' legacy 8080 rule.
+    $ExistingRules = @(Get-NetFirewallRule -Name 'GPUmates-LlamaAPI-*' -ErrorAction SilentlyContinue)
+    foreach ($ExistingRule in $ExistingRules) {
+        if ($ExistingRule.Name -notmatch '^GPUmates-LlamaAPI-\d+$') { continue }
+        $Applications = @(Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $ExistingRule -ErrorAction Stop)
+        foreach ($Application in $Applications) {
+            if ([string]::Equals([string]$Application.Program, $ExpectedProgram, [StringComparison]::OrdinalIgnoreCase)) {
+                Remove-NetFirewallRule -Name $ExistingRule.Name
+                Write-Host "Removed firewall rule $($ExistingRule.Name)."
+                break
+            }
+        }
+    }
+}
 
 $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $Principal = [Security.Principal.WindowsPrincipal]::new($Identity)
@@ -18,14 +42,7 @@ if (-not $Principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 
 if ($Remove) {
-    $ExistingRule = Get-NetFirewallRule -Name $RuleName -ErrorAction SilentlyContinue
-    if ($ExistingRule) {
-        Remove-NetFirewallRule -Name $RuleName
-        Write-Host "Removed firewall rule $RuleName."
-    }
-    else {
-        Write-Host "Firewall rule $RuleName does not exist."
-    }
+    Remove-InstallationFirewallRules
     return
 }
 
@@ -47,13 +64,9 @@ if ($UniqueClientAddresses.Count -ne $ClientAddresses.Count) {
     throw 'ClientIP contains a duplicate address.'
 }
 
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
 $ServerExe = (Resolve-Path -LiteralPath (Join-Path $ProjectRoot 'runtime\llama-server.exe')).Path
 
-$ExistingRule = Get-NetFirewallRule -Name $RuleName -ErrorAction SilentlyContinue
-if ($ExistingRule) {
-    Remove-NetFirewallRule -Name $RuleName
-}
+Remove-InstallationFirewallRules
 
 New-NetFirewallRule `
     -Name $RuleName `

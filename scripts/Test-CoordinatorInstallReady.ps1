@@ -1,6 +1,10 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][System.Net.IPAddress]$CoordinatorIP,
+    [int]$RouterPort = 8080,
+    [int]$DashboardPort = 8090,
+    [int]$ControlPort = 8091,
+    [string]$InstallRoot,
     [string]$ErrorPath
 )
 
@@ -29,27 +33,97 @@ if ($CoordinatorAddress -notin $LocalIPv4) {
     throw "Coordinator IP $CoordinatorAddress is not assigned to an active interface on this PC."
 }
 
-$PortProbes = @(
-    @([System.Net.IPAddress]::Loopback, 8080),
-    @($CoordinatorIP, 8080),
-    @($CoordinatorIP, 8090),
-    @([System.Net.IPAddress]::Loopback, 8091)
-)
-foreach ($ProbeDefinition in $PortProbes) {
-    $ProbeAddress = [System.Net.IPAddress]$ProbeDefinition[0]
-    $ProbePort = [int]$ProbeDefinition[1]
-    $Probe = [System.Net.Sockets.TcpListener]::new($ProbeAddress, $ProbePort)
+function Assert-CoordinatorProcessesStopped {
+    param([Parameter(Mandatory)][string]$InstallRoot)
+
+    $ResolvedRoot = [IO.Path]::GetFullPath($InstallRoot)
+    $ExpectedRouter = [IO.Path]::GetFullPath((Join-Path $ResolvedRoot 'runtime\llama-server.exe'))
+    $ScriptPatterns = @(
+        @('Start-GPUmatesControlCenter.ps1', 'Start-GPUmatesDashboard.ps1', 'Start-ModelRouter.ps1', 'Start-ModelRouterFromControl.ps1', 'Start-Coordinator.ps1') |
+            ForEach-Object {
+                $ScriptPath = [regex]::Escape([IO.Path]::GetFullPath((Join-Path $ResolvedRoot "scripts\$_")))
+                '(?i)(?:^|\s)-File\s+(?:"' + $ScriptPath + '"|' + $ScriptPath + ')(?=\s|$)'
+            }
+    )
     try {
-        $Probe.Server.ExclusiveAddressUse = $true
-        $Probe.Start()
+        $Processes = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe' OR Name = 'llama-server.exe'" -ErrorAction Stop)
     }
     catch {
-        throw "TCP $($ProbeAddress.IPAddressToString):$ProbePort is already in use. Stop the old GPUmates router, dashboard, or Control Center before setup."
+        throw 'Setup could not check for existing GPUmates processes. Close GPUmates and retry setup as Administrator.'
     }
-    finally {
-        $Probe.Stop()
+    foreach ($Process in $Processes) {
+        $Owned = $false
+        if ($Process.Name -ieq 'llama-server.exe' -and -not [string]::IsNullOrWhiteSpace([string]$Process.ExecutablePath)) {
+            $Owned = [string]::Equals(
+                [IO.Path]::GetFullPath([string]$Process.ExecutablePath), $ExpectedRouter,
+                [StringComparison]::OrdinalIgnoreCase
+            )
+        }
+        elseif ($Process.Name -iin @('powershell.exe', 'pwsh.exe')) {
+            foreach ($Pattern in $ScriptPatterns) {
+                if ([string]$Process.CommandLine -match $Pattern) {
+                    $Owned = $true
+                    break
+                }
+            }
+        }
+        if ($Owned) {
+            throw 'GPUmates is still running from this installation folder. Close its Control Center, dashboard, and router before retrying setup, including when changing their ports.'
+        }
     }
 }
+
+function Assert-CoordinatorPortsAvailable {
+    param(
+        [Parameter(Mandatory)][System.Net.IPAddress]$CoordinatorIP,
+        [int]$RouterPort = 8080,
+        [int]$DashboardPort = 8090,
+        [int]$ControlPort = 8091
+    )
+    $Ports = @($RouterPort, $DashboardPort, $ControlPort)
+    if (@($Ports | Where-Object { $_ -lt 1024 -or $_ -gt 65535 }).Count -gt 0) {
+        throw 'Each Coordinator TCP port must be a whole number from 1024 to 65535.'
+    }
+    if (@($Ports | Select-Object -Unique).Count -ne 3) {
+        throw 'Chat, dashboard, and Control Center must use three different TCP ports.'
+    }
+    # Runtime ownership checks consider every interface, including IPv6.
+    # Match that policy before accepting a port that can bind on the selected IP.
+    foreach ($Endpoint in [Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners()) {
+        if ($Endpoint.Port -in $Ports) {
+            $ServiceName = if ($Endpoint.Port -eq $RouterPort) { 'Chat / inference API' }
+                elseif ($Endpoint.Port -eq $DashboardPort) { 'Dashboard' }
+                else { 'Control Center' }
+            throw "$ServiceName TCP $($Endpoint.Address):$($Endpoint.Port) is already in use. Go back to Main PC TCP ports and choose another port, or close the app using it before retrying."
+        }
+    }
+    $PortProbes = @(
+        @([System.Net.IPAddress]::Loopback, $RouterPort, 'Chat / inference API'),
+        @($CoordinatorIP, $RouterPort, 'Chat / inference API'),
+        @($CoordinatorIP, $DashboardPort, 'Dashboard'),
+        @([System.Net.IPAddress]::Loopback, $ControlPort, 'Control Center')
+    )
+    foreach ($ProbeDefinition in $PortProbes) {
+        $ProbeAddress = [System.Net.IPAddress]$ProbeDefinition[0]
+        $ProbePort = [int]$ProbeDefinition[1]
+        $Probe = [System.Net.Sockets.TcpListener]::new($ProbeAddress, $ProbePort)
+        try {
+            $Probe.Server.ExclusiveAddressUse = $true
+            $Probe.Start()
+        }
+        catch {
+            throw "$($ProbeDefinition[2]) TCP $($ProbeAddress.IPAddressToString):$ProbePort is already in use or unavailable. Go back to Main PC TCP ports and choose another port, or close the app using it before retrying."
+        }
+        finally {
+            $Probe.Stop()
+        }
+    }
+}
+
+if (-not [string]::IsNullOrWhiteSpace($InstallRoot)) {
+    Assert-CoordinatorProcessesStopped -InstallRoot $InstallRoot
+}
+Assert-CoordinatorPortsAvailable -CoordinatorIP $CoordinatorIP -RouterPort $RouterPort -DashboardPort $DashboardPort -ControlPort $ControlPort
 
 $NvidiaSmi = Get-Command nvidia-smi.exe -ErrorAction SilentlyContinue
 if ($null -eq $NvidiaSmi) {

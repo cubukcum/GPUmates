@@ -69,6 +69,7 @@ Source: "{#ProjectRoot}\scripts\Register-WorkerOnCoordinator.ps1"; DestDir: "{ap
 Source: "{#ProjectRoot}\scripts\Apply-CoordinatorSharing.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion; Check: IsCoordinator
 Source: "{#ProjectRoot}\scripts\Uninstall-Coordinator.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion; Check: IsCoordinator
 Source: "{#ProjectRoot}\scripts\Install-Coordinator.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion; Check: IsCoordinator
+Source: "{#ProjectRoot}\scripts\GPUmates.Network.psm1"; DestDir: "{app}\scripts"; Flags: ignoreversion; Check: IsCoordinator
 Source: "{#ProjectRoot}\scripts\Test-CoordinatorInstallReady.ps1"; Flags: dontcopy
 Source: "{#ProjectRoot}\config\telemetry-nodes.json"; DestDir: "{app}\config"; Flags: ignoreversion onlyifdoesntexist; Check: IsCoordinator
 Source: "{#ProjectRoot}\config\gpumates-models.ini"; DestDir: "{app}\config"; Flags: ignoreversion onlyifdoesntexist; Check: IsCoordinator
@@ -124,6 +125,10 @@ Root: HKLM; Subkey: "Software\GPUmates\Unified"; ValueType: string; ValueName: "
 Root: HKLM; Subkey: "Software\GPUmates\Unified"; ValueType: string; ValueName: "CoordinatorIP"; ValueData: "{code:GetCoordinatorIP}"; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "Software\GPUmates\Unified"; ValueType: string; ValueName: "WorkerIP"; ValueData: "{code:GetWorkerIP}"; Flags: uninsdeletevalue; Check: IsWorker
 Root: HKLM; Subkey: "Software\GPUmates\Worker"; ValueType: dword; ValueName: "CacheEnabled"; ValueData: "{code:GetCacheEnabledRegistryValue}"; Flags: uninsdeletevalue uninsdeletekeyifempty; Check: IsWorker
+Root: HKLM; Subkey: "Software\GPUmates\Coordinator"; ValueType: string; ValueName: "RouterPort"; ValueData: "{code:GetRouterPort}"; Flags: uninsdeletevalue uninsdeletekeyifempty; Check: IsCoordinator
+Root: HKLM; Subkey: "Software\GPUmates\Coordinator"; ValueType: string; ValueName: "DashboardPort"; ValueData: "{code:GetCoordinatorDashboardPort}"; Flags: uninsdeletevalue; Check: IsCoordinator
+Root: HKLM; Subkey: "Software\GPUmates\Coordinator"; ValueType: string; ValueName: "ControlPort"; ValueData: "{code:GetControlPort}"; Flags: uninsdeletevalue; Check: IsCoordinator
+Root: HKLM; Subkey: "Software\GPUmates\Unified"; ValueType: string; ValueName: "DashboardPort"; ValueData: "{code:GetWorkerDashboardPort}"; Flags: uninsdeletevalue; Check: IsWorker
 
 [Code]
 var
@@ -131,6 +136,9 @@ var
   CoordinatorPage: TInputQueryWizardPage;
   WorkerPage: TInputQueryWizardPage;
   CachePage: TInputOptionWizardPage;
+  CoordinatorPortsPage: TInputQueryWizardPage;
+
+#include "..\coordinator\CoordinatorPorts.iss"
 
 function IsExistingWorkerInstall: Boolean;
 var
@@ -334,7 +342,7 @@ end;
 
 procedure InitializeWizard;
 var
-  RoleParam, InstalledRole, NodeParam, CoordinatorParam, WorkerParam: String;
+  RoleParam, InstalledRole, NodeParam, CoordinatorParam, WorkerParam, DashboardPortParam: String;
 begin
   RolePage := CreateInputOptionPage(
     wpInfoBefore,
@@ -364,9 +372,10 @@ begin
   );
   CoordinatorPage.Add('Coordinator name:', False);
   CoordinatorPage.Add('This Main PC IPv4:', False);
+  CreateCoordinatorPortsPage(CoordinatorPage.ID);
 
   WorkerPage := CreateInputQueryPage(
-    CoordinatorPage.ID,
+    CoordinatorPortsPage.ID,
     'Worker private LAN configuration',
     'Choose the Main PC and this worker address',
     'Use fixed RFC1918 IPv4 addresses. Setup will permit only the Main PC through Windows Firewall.'
@@ -374,6 +383,7 @@ begin
   WorkerPage.Add('Worker name:', False);
   WorkerPage.Add('Coordinator / Main PC IPv4:', False);
   WorkerPage.Add('This worker PC IPv4:', False);
+  WorkerPage.Add('Main PC dashboard port:', False);
 
   NodeParam := Trim(ExpandConstant('{param:NODENAME|}'));
   if NodeParam = '' then
@@ -391,6 +401,11 @@ begin
   if WorkerParam = '' then
     WorkerParam := ReadStoredSetting('WorkerIP');
   WorkerPage.Values[2] := WorkerParam;
+  DashboardPortParam := Trim(ExpandConstant('{param:DASHBOARDPORT|}'));
+  if DashboardPortParam = '' then
+    DashboardPortParam := ReadStoredSetting('DashboardPort');
+  if DashboardPortParam = '' then DashboardPortParam := '8090';
+  WorkerPage.Values[3] := DashboardPortParam;
 
   CachePage := CreateInputOptionPage(
     WorkerPage.ID,
@@ -407,6 +422,7 @@ end;
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
   Result := ((PageID = CoordinatorPage.ID) and IsWorker) or
+            ((PageID = CoordinatorPortsPage.ID) and IsWorker) or
             ((PageID = WorkerPage.ID) and IsCoordinator) or
             ((PageID = CachePage.ID) and IsCoordinator);
 end;
@@ -469,7 +485,7 @@ begin
   Result := True;
 end;
 
-function ValidateCurrentRole(var ErrorText: String): Boolean;
+function ValidateCurrentRole(var ErrorText: String; CheckPorts: Boolean): Boolean;
 var
   InstalledRole: String;
 begin
@@ -486,7 +502,9 @@ begin
     if not IsValidNodeName(CoordinatorPage.Values[0]) then
       ErrorText := 'Coordinator name may contain only letters, numbers, spaces, dots, underscores, and hyphens.'
     else if not IsPrivateIPv4(CoordinatorPage.Values[1]) then
-      ErrorText := 'Main PC IP must be one private IPv4 address.';
+      ErrorText := 'Main PC IP must be one private IPv4 address.'
+    else if CheckPorts and not ValidateCoordinatorPorts(ErrorText) then
+      Exit;
   end
   else
   begin
@@ -497,7 +515,9 @@ begin
     else if not IsPrivateIPv4(WorkerPage.Values[2]) then
       ErrorText := 'Worker IP must be one private IPv4 address assigned to this PC.'
     else if CompareText(Trim(WorkerPage.Values[1]), Trim(WorkerPage.Values[2])) = 0 then
-      ErrorText := 'Coordinator and worker IPs must be different.';
+      ErrorText := 'Coordinator and worker IPs must be different.'
+    else if not IsValidTcpPort(WorkerPage.Values[3]) then
+      ErrorText := 'Main PC dashboard port must be a whole number from 1024 to 65535.';
   end;
   Result := ErrorText = '';
 end;
@@ -524,9 +544,9 @@ begin
       WizardForm.DirEdit.Text := RoleDefaultDirectory(SelectedRole);
     Exit;
   end;
-  if (CurPageID = CoordinatorPage.ID) or (CurPageID = WorkerPage.ID) then
+  if (CurPageID = CoordinatorPage.ID) or (CurPageID = CoordinatorPortsPage.ID) or (CurPageID = WorkerPage.ID) then
   begin
-    if not ValidateCurrentRole(ErrorText) then
+    if not ValidateCurrentRole(ErrorText, CurPageID <> CoordinatorPage.ID) then
     begin
       MsgBox(ErrorText, mbError, MB_OK);
       Result := False;
@@ -555,9 +575,14 @@ begin
     Result := Trim(WorkerPage.Values[0]);
 end;
 
+function GetWorkerDashboardPort(Param: String): String;
+begin
+  Result := Trim(WorkerPage.Values[3]);
+end;
+
 function GetDashboardUrl(Param: String): String;
 begin
-  Result := 'http://' + Trim(WorkerPage.Values[1]) + ':8090';
+  Result := 'http://' + Trim(WorkerPage.Values[1]) + ':' + GetWorkerDashboardPort('');
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -587,7 +612,7 @@ begin
   end;
   if IsCoordinator and (Trim(CoordinatorPage.Values[1]) = '') then
     CoordinatorPage.Values[1] := DetectPrivateIP;
-  if not ValidateCurrentRole(ValidationError) then
+  if not ValidateCurrentRole(ValidationError, True) then
   begin
     Result := ValidationError;
     Exit;
@@ -601,7 +626,8 @@ begin
     ExtractTemporaryFile('Test-CoordinatorInstallReady.ps1');
     ScriptPath := ExpandConstant('{tmp}\Test-CoordinatorInstallReady.ps1');
     Params := '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath +
-      '" -CoordinatorIP "' + GetCoordinatorIP('') + '" -ErrorPath "' + ErrorPath + '"';
+      '" -CoordinatorIP "' + GetCoordinatorIP('') + '" -ErrorPath "' + ErrorPath +
+      '" -InstallRoot "' + ExpandConstant('{app}') + '"' + CoordinatorPortArguments;
   end
   else
   begin
@@ -636,7 +662,7 @@ begin
     Params := '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath +
       '" -CoordinatorIP "' + GetCoordinatorIP('') +
       '" -NodeName "' + GetNodeName('') +
-      '" -InstallRoot "' + ExpandConstant('{app}') + '"';
+      '" -InstallRoot "' + ExpandConstant('{app}') + '"' + CoordinatorPortArguments;
   end
   else
   begin

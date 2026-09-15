@@ -36,6 +36,8 @@ if ([string]::IsNullOrWhiteSpace($NodeName) -or $NodeName -notmatch '^[\p{L}\p{N
 }
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
+Import-Module (Join-Path $PSScriptRoot 'GPUmates.Network.psm1') -Force
+$NetworkConfiguration = Get-GPUmatesNetworkConfiguration -ProjectRoot $ProjectRoot
 if ([string]::IsNullOrWhiteSpace($NodeConfig)) {
     $NodeConfig = Join-Path $ProjectRoot 'config\telemetry-nodes.json'
 }
@@ -118,4 +120,4 @@ Write-Host 'Router command (one line):'
 Write-Host "& '.\scripts\Start-ModelRouter.ps1' -WorkerIP $RouterList"
 Write-Host ''
 Write-Host 'Administrator dashboard-firewall command (one line, full client list):'
-Write-Host "& '.\scripts\Configure-DashboardFirewall.ps1' -CoordinatorIP $($CoordinatorIP.IPAddressToString) -ClientIP $AllowedList"
+Write-Host "& '.\scripts\Configure-DashboardFirewall.ps1' -CoordinatorIP $($CoordinatorIP.IPAddressToString) -ClientIP $AllowedList -Port $($NetworkConfiguration.dashboardPort)"

@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$DashboardBaseUrl,
+    [ValidateRange(1024, 65535)][int]$DashboardPort = 8090,
     [string]$TemplateRoot,
     [string]$OutputRoot
 )
@@ -8,10 +9,16 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Accept only the existing dashboard listener, never arbitrary external content.
+if (-not $PSBoundParameters.ContainsKey('DashboardPort')) {
+    Import-Module (Join-Path $PSScriptRoot 'GPUmates.Network.psm1') -Force
+    $NetworkConfiguration = Get-GPUmatesNetworkConfiguration -ProjectRoot (Split-Path -Parent $PSScriptRoot)
+    $DashboardPort = $NetworkConfiguration.dashboardPort
+}
+
+# Accept only the selected dashboard listener, never arbitrary external content.
 $UrlText = $DashboardBaseUrl.Trim()
-if ($UrlText -notmatch '^http://(localhost|(?:0|[1-9][0-9]{0,2})(?:\.(?:0|[1-9][0-9]{0,2})){3}):8090/?$') {
-    throw 'DashboardBaseUrl must be http://localhost:8090 or an exact private/loopback IPv4 address on port 8090.'
+if ($UrlText -notmatch ('^http://(localhost|(?:0|[1-9][0-9]{0,2})(?:\.(?:0|[1-9][0-9]{0,2})){3}):' + $DashboardPort + '/?$')) {
+    throw "DashboardBaseUrl must use localhost or an exact private/loopback IPv4 address on configured HTTP port $DashboardPort."
 }
 $DashboardUri = [uri]$UrlText
 if ($DashboardUri.Host -ne 'localhost') {
