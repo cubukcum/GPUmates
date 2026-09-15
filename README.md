@@ -34,7 +34,7 @@ and `checksums.sha256`.
 The recommended operator path for every Windows GPU PC is one offline setup:
 
 ```text
-dist\installer\GPUmates-Setup-0.3.3.exe
+dist\installer\GPUmates-Setup-0.3.4.exe
 ```
 
 On PC1 choose **Main PC / Coordinator**. On PC2 and every additional GPU
@@ -215,6 +215,14 @@ labelled persistent tensor-cache option and enables it by default for fast
 reloads on trusted PCs. The setting and cache can be managed later from
 **GPUmates Worker Cache Settings** on that worker. See
 [WORKER-INSTALLER.md](WORKER-INSTALLER.md).
+
+Version 0.3.4 asks for a new AgentKey when a worker's configured Coordinator IP
+changes. A key saved by an older version also needs to be entered once after
+upgrading. If a worker is online for compute but its GPU is missing from the
+dashboard after changing groups, stop both worker windows, use **Start menu ->
+GPUmates Worker -> Forget saved AgentKey**, then start the worker and enter the
+new Coordinator's **AgentKey**. See the
+[worker recovery steps](WORKER-INSTALLER.md#change-coordinator-or-replace-a-saved-agentkey).
 
 ## Let PC2 use the chat API later
 

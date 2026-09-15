@@ -73,7 +73,7 @@ Name: "{autoprograms}\GPUmates Worker\Start GPUmates Worker"; Filename: "{sys}\W
 Name: "{autoprograms}\GPUmates Worker\GPUmates Worker Status"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File ""{app}\scripts\Show-WorkerStatus.ps1"""; WorkingDir: "{app}"
 Name: "{autoprograms}\GPUmates Worker\Open GPU Dashboard"; Filename: "{code:GetDashboardUrl}"
 Name: "{autoprograms}\GPUmates Worker\GPUmates Worker Cache Settings"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\scripts\Set-WorkerCache.ps1"""; WorkingDir: "{app}"; Comment: "Enable, disable, inspect, or clear the persistent worker tensor cache"
-Name: "{autoprograms}\GPUmates Worker\Forget saved AgentKey"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File ""{app}\scripts\Clear-WorkerAgentKey.ps1"" -Confirm:$false"; WorkingDir: "{app}"
+Name: "{autoprograms}\GPUmates Worker\Forget saved AgentKey"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File ""{app}\scripts\Clear-WorkerAgentKey.ps1"""; WorkingDir: "{app}"
 Name: "{autoprograms}\GPUmates Worker\Readme and safety"; Filename: "{app}\README.txt"
 Name: "{autodesktop}\Start GPUmates Worker"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\Start-WorkerStack.ps1"""; WorkingDir: "{app}"; Tasks: desktopicon
 

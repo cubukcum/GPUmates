@@ -1,6 +1,6 @@
 # GPUmates unified Windows installer
 
-`GPUmates-Setup-0.3.3.exe` is the recommended offline installer for every
+`GPUmates-Setup-0.3.4.exe` is the recommended offline installer for every
 Windows 11 GPU computer in the cluster. Setup asks for exactly one role:
 
 | Role | Install it on | Purpose |
@@ -19,7 +19,7 @@ A browser-only client installs nothing.
   addresses on a trusted LAN.
 - Close existing GPUmates, llama-server, RPC-worker, and telemetry windows.
 - Keep the EXE beside its `.sha256` file and verify it after copying. Version
-  0.3.3 is not Authenticode-signed, so SmartScreen may show **Unknown
+  0.3.4 is not Authenticode-signed, so SmartScreen may show **Unknown
   publisher**.
 - If either older standalone GPUmates Coordinator or Worker package is
   installed, uninstall it first. Unified Setup deliberately blocks mixed
@@ -28,7 +28,7 @@ A browser-only client installs nothing.
 
 ## Install PC1
 
-1. Run `GPUmates-Setup-0.3.3.exe`, approve UAC, and choose **Main PC /
+1. Run `GPUmates-Setup-0.3.4.exe`, approve UAC, and choose **Main PC /
    Coordinator**.
 2. Confirm PC1's name and its reserved private IPv4 address.
 3. Choose the chat/API, dashboard, and Control Center TCP ports. The defaults
@@ -48,7 +48,7 @@ the per-session administration token. Setup does not include GGUF files.
 
 ## Install PC2 and later workers
 
-1. Copy the same `GPUmates-Setup-0.3.3.exe` and checksum sidecar to the worker.
+1. Copy the same `GPUmates-Setup-0.3.4.exe` and checksum sidecar to the worker.
 2. Run Setup, approve UAC, and choose **GPU Worker**.
 3. Enter a unique worker name, PC1's private IPv4, and this worker's detected
    private IPv4. Set **Main PC dashboard port** to the dashboard port chosen
@@ -59,7 +59,9 @@ the per-session administration token. Setup does not include GGUF files.
    Settings > Clear cache** after Setup.
 5. Leave **Start GPUmates Worker now** selected.
 6. On the first telemetry start, paste the same AgentKey saved by PC1. It is
-   protected for that Windows account with DPAPI.
+   protected for that Windows account with DPAPI and associated with PC1's IP.
+   Changing that IP prompts for the new Coordinator's AgentKey. A key saved by
+   version 0.3.3 or earlier also prompts once after upgrading.
 
 The worker creates inbound TCP 50052 and 9835 rules restricted to PC1's exact
 IP. Its two visible PowerShell windows must stay open. After a reboot, use
@@ -91,6 +93,31 @@ TCP 50052 online to contribute to inference. Telemetry TCP 9835 controls its
 dashboard card.
 
 ## Upgrade, change role, and uninstall
+
+Version 0.3.4 fixes a worker retaining the previous group's AgentKey after
+changing its Coordinator IP. Keys are now associated with the configured
+Coordinator IP; a different IP or an older saved key with no IP association
+requires entry again on the next telemetry start. Upgrades on the same
+Coordinator reuse keys saved by version 0.3.4 or later.
+Version 0.3.4 also fixes the **Forget saved AgentKey** shortcut failing to
+convert its `Confirm` argument in Windows PowerShell.
+
+To recover an existing worker immediately, stop both worker windows with
+`Ctrl+C`, open **Start menu -> GPUmates Worker -> Forget saved AgentKey**, then
+choose **Start GPUmates Worker** and enter the new Coordinator's **AgentKey**.
+This is separate from the DashboardKey and Llama API key. If the Coordinator
+is replaced at the same IP or its AgentKey is rotated, use the same **Forget
+saved AgentKey** steps. Register the worker's name and current IP on the new
+Coordinator under **GPU nodes -> Add worker**; worker installation does not
+register it remotely. See [worker troubleshooting](WORKER-INSTALLER.md#change-coordinator-or-replace-a-saved-agentkey).
+
+On version 0.3.3, if **Forget saved AgentKey** reports a `Confirm` argument
+error, run this in the PowerShell window left open by that shortcut, then
+restart the worker. Adjust the path if you chose a different installation folder:
+
+```powershell
+& 'C:\Program Files\GPUmates\Worker\scripts\Clear-WorkerAgentKey.ps1'
+```
 
 Version 0.3.3 adds selectable Coordinator ports with conflict checks during Setup.
 The launcher, service URLs, and LAN sharing firewall rules use the saved ports;
@@ -130,13 +157,13 @@ after Windows restarts.
 Coordinator, with explicit values recommended:
 
 ```powershell
-.\GPUmates-Setup-0.3.3.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ROLE=coordinator /COORDINATORIP=172.25.50.14 /NODENAME=PC1 /ROUTERPORT=18080 /DASHBOARDPORT=18090 /CONTROLPORT=18091
+.\GPUmates-Setup-0.3.4.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ROLE=coordinator /COORDINATORIP=172.25.50.14 /NODENAME=PC1 /ROUTERPORT=18080 /DASHBOARDPORT=18090 /CONTROLPORT=18091
 ```
 
 Worker requires all four role/network parameters:
 
 ```powershell
-.\GPUmates-Setup-0.3.3.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ROLE=worker /COORDINATORIP=172.25.50.14 /WORKERIP=172.25.50.49 /NODENAME=PC2 /DASHBOARDPORT=18090 /CACHE=1
+.\GPUmates-Setup-0.3.4.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ROLE=worker /COORDINATORIP=172.25.50.14 /WORKERIP=172.25.50.49 /NODENAME=PC2 /DASHBOARDPORT=18090 /CACHE=1
 ```
 
 Use `/CACHE=0` to opt out of persistent worker tensor caching.

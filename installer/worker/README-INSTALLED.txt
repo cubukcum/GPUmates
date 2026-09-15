@@ -14,6 +14,17 @@ Start Menu shortcuts
 The telemetry window asks for the coordinator's AgentKey the first time it is
 started. Windows DPAPI then protects it for the current Windows user; it is not
 stored in the worker JSON, registry, installer log, or shortcut arguments.
+The saved key is associated with the configured Coordinator IP. A different
+Coordinator IP or an older saved key without that association prompts again.
+
+If compute is online but GPU readings are missing after changing groups, stop
+both worker windows with Ctrl+C, choose Forget saved AgentKey in the Start Menu
+using the same Windows account, then start GPUmates Worker again. Enter the new
+Coordinator's AgentKey in the telemetry window; this is separate from dashboard
+and chat keys. Also have the new Coordinator owner register this worker's name
+and current IP. Use Forget saved AgentKey if the Coordinator changes its key or
+is replaced at the same IP. Rerun Setup with the new Coordinator IP and current
+worker IP if the two inbound firewall rules still allow the old Coordinator.
 
 Keep both worker windows open while contributing this GPU. Ctrl+C stops the
 corresponding process. The complete model file remains on the coordinator, and

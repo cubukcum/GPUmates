@@ -1,4 +1,4 @@
-#define AppVersion "0.3.3"
+#define AppVersion "0.3.4"
 #define ProjectRoot "..\.."
 
 [Setup]
@@ -12,7 +12,7 @@ VersionInfoCompany=GPUmates
 VersionInfoDescription=GPUmates unified Coordinator and GPU Worker setup
 VersionInfoProductName=GPUmates Setup
 VersionInfoProductVersion={#AppVersion}
-VersionInfoVersion=0.3.3.0
+VersionInfoVersion=0.3.4.0
 DefaultDirName={code:GetDefaultDirName}
 UsePreviousAppDir=no
 DefaultGroupName=GPUmates
@@ -107,7 +107,7 @@ Name: "{autoprograms}\GPUmates Worker\Start GPUmates Worker"; Filename: "{sys}\W
 Name: "{autoprograms}\GPUmates Worker\GPUmates Worker Status"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File ""{app}\scripts\Show-WorkerStatus.ps1"""; WorkingDir: "{app}"; Check: IsWorker
 Name: "{autoprograms}\GPUmates Worker\Open GPU Dashboard"; Filename: "{code:GetDashboardUrl}"; Check: IsWorker
 Name: "{autoprograms}\GPUmates Worker\GPUmates Worker Cache Settings"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\scripts\Set-WorkerCache.ps1"""; WorkingDir: "{app}"; Comment: "Enable, disable, inspect, or clear the persistent worker tensor cache"; Check: IsWorker
-Name: "{autoprograms}\GPUmates Worker\Forget saved AgentKey"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File ""{app}\scripts\Clear-WorkerAgentKey.ps1"" -Confirm:$false"; WorkingDir: "{app}"; Check: IsWorker
+Name: "{autoprograms}\GPUmates Worker\Forget saved AgentKey"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File ""{app}\scripts\Clear-WorkerAgentKey.ps1"""; WorkingDir: "{app}"; Check: IsWorker
 Name: "{autoprograms}\GPUmates Worker\Readme and safety"; Filename: "{app}\README.txt"; Check: IsWorker
 Name: "{autodesktop}\Start GPUmates Worker"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\Start-WorkerStack.ps1"""; WorkingDir: "{app}"; Tasks: desktopicon; Check: IsWorker
 

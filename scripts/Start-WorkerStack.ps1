@@ -105,7 +105,7 @@ try {
     else {
         $TelemetryArguments = '-NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File "{0}" -ConfigPath "{1}"' -f $TelemetryLauncher, $ResolvedConfigPath
         Start-Process -FilePath $PowerShellExe -ArgumentList $TelemetryArguments -WorkingDirectory $ProjectRoot -WindowStyle Normal | Out-Null
-        Write-Host 'Started the visible telemetry window. The AgentKey is requested only on first use.'
+        Write-Host 'Started the visible telemetry window. The AgentKey is requested on first use or after changing the main PC.'
     }
 
     Write-Host 'Keep both service windows open while sharing this GPU. Use Ctrl+C in each window to stop.'

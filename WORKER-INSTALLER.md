@@ -18,7 +18,7 @@ upgrading. They otherwise occupy TCP `50052` and `9835`.
 
 ## Install a worker
 
-1. Copy `dist\installer\GPUmates-Setup-0.3.1.exe` to the worker PC.
+1. Copy `dist\installer\GPUmates-Setup-0.3.4.exe` to the worker PC.
 2. Verify the adjacent SHA-256 file after transfer.
 3. Double-click the EXE normally; Setup requests Administrator permission.
 4. Choose **GPU Worker**, then enter a worker name, the coordinator/PC1 IPv4,
@@ -34,7 +34,9 @@ inbound rules restricted to the exact coordinator IP and local ports.
 
 On first monitoring start, paste the shared AgentKey. It is protected for that
 Windows user with Windows DPAPI; it is not stored in configuration, installer
-logs, shortcut arguments, or the registry. Use the **Forget saved AgentKey**
+logs, shortcut arguments, or the registry. Version 0.3.4 associates it with the
+configured Coordinator IP and reuses it only for that IP. A different IP or a
+key saved by an older version prompts again. Use the **Forget saved AgentKey**
 shortcut to remove it.
 
 The PC owner explicitly starts two visible windows from **Start GPUmates
@@ -90,13 +92,56 @@ For example, two workers use one line on PC1:
 
 Every listed RPC worker must be running before the router starts.
 
+## Change coordinator or replace a saved AgentKey
+
+Version 0.3.3 and earlier could reuse a saved AgentKey after you changed the
+Coordinator IP during Setup. RPC compute does not use that key, so it can show
+**ONLINE** while telemetry authentication fails and the dashboard cannot read
+your GPU. The **GPUmates Worker Status** shortcut also checks local listening
+ports; that does not confirm the Coordinator can authenticate to telemetry.
+
+To fix an existing worker without waiting for an upgrade:
+
+1. Stop both visible worker windows with `Ctrl+C`.
+2. Open **Start menu -> GPUmates Worker -> Forget saved AgentKey** using the
+   same Windows account that runs the worker. If version 0.3.3 reports a
+   `Confirm` argument error, run the workaround below in that shortcut's
+   PowerShell window.
+3. Choose **Start GPUmates Worker** and enter the new Coordinator's **AgentKey**
+   in the telemetry window. Use its AgentKey, separate from the DashboardKey
+   used in a browser and the Llama API key used for chat.
+4. On the new Coordinator, add or verify this worker's name and current IP under
+   **GPU nodes -> Add worker**. Confirm both **RPC compute** and **Telemetry**
+   are **ONLINE**.
+
+The version 0.3.3 shortcut workaround is this direct command. Adjust the path
+if you chose a different installation folder, then continue with step 3:
+
+```powershell
+& 'C:\Program Files\GPUmates\Worker\scripts\Clear-WorkerAgentKey.ps1'
+```
+
+Version 0.3.4 prompts automatically when the configured Coordinator IP changes.
+It also fixes the **Forget saved AgentKey** shortcut's `Confirm` argument error.
+The first telemetry start after upgrading from an older saved key also asks
+once because that key has no Coordinator IP association. Replacing the main
+PC at the same IP or rotating its AgentKey still requires **Forget saved
+AgentKey** followed by a worker restart.
+
+If telemetry remains offline, confirm Setup has the new Coordinator's IP and
+this worker's current IP. Rerun Worker Setup with those addresses to recreate
+the RPC (TCP 50052) and telemetry (TCP 9835) inbound rules for the new
+Coordinator. Keep both worker windows open. PC1's **Sharing** rules control
+browser access to chat and the dashboard; the worker's rules control PC1's
+access to compute and telemetry.
+
 ## Security and signing
 
 The RPC protocol remains experimental, unencrypted, and unauthenticated. Never
 port-forward its ports. The exact-IP firewall rule is the security boundary;
 telemetry additionally requires the AgentKey.
 
-Version `0.3.0` is not Authenticode-signed, so Windows SmartScreen may display
+Version `0.3.4` is not Authenticode-signed, so Windows SmartScreen may display
 **Unknown publisher**. Verify the SHA-256 checksum. A trusted code-signing
 certificate is needed before distributing this as a polished public installer.
 
